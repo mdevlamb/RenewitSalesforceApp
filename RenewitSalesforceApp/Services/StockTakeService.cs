@@ -23,9 +23,6 @@ namespace RenewitSalesforceApp.Services
             _authService = authService;
         }
 
-        /// <summary>
-        /// Create a stock take record from the mobile form
-        /// </summary>
         public async Task<StockTakeRecord> CreateStockTakeAsync(
             string vehicleRegistration,
             string discRegData,
@@ -34,7 +31,18 @@ namespace RenewitSalesforceApp.Services
             List<string> photoPaths = null,
             string comments = null,
             double? latitude = null,
-            double? longitude = null)
+            double? longitude = null,
+
+            // Additional vehicle details from barcode scan
+            string licenseNumber = null,
+            string make = null,
+            string model = null,
+            string colour = null,
+            string vehicleType = null,
+            string vin = null,
+            string engineNumber = null,
+            string licenseExpiryDate = null,
+            string notes = null)
         {
             try
             {
@@ -42,34 +50,48 @@ namespace RenewitSalesforceApp.Services
 
                 var stockTake = new StockTakeRecord
                 {
+                    // Main identification
                     DISC_REG__c = discRegData,
                     Vehicle_Registration__c = vehicleRegistration,
+                    License_Number__c = licenseNumber,
+
+                    // Vehicle details from barcode scan
+                    Make__c = make,
+                    Model__c = model,
+                    Colour__c = colour,
+                    Vehicle_Type__c = vehicleType,
+                    VIN__c = vin,
+                    Engine_Number__c = engineNumber,
+                    License_Expiry_Date__c = licenseExpiryDate,
+
+                    // Location
                     Yards__c = yards,
                     Yard_Location__c = yardLocation,
+
+                    // Comments
                     Comments__c = comments,
-                    Stock_Take_Date = DateTime.Now,
-                    Stock_Take_By = _authService?.CurrentUser?.Name ?? "Unknown User",
+                    Notes__c = notes,
+
+                    // Sync tracking
                     IsSynced = false,
                     SyncAttempts = 0
                 };
 
-                // Add GPS coordinates if provided
-                if (latitude.HasValue && longitude.HasValue)
-                {
-                    stockTake.GPS_CORD__c = $"{latitude.Value:F6},{longitude.Value:F6}";
-                    stockTake.Geo_Latitude__c = latitude.Value;
-                    stockTake.Geo_Longitude__c = longitude.Value;
-                }
-                else
-                {
-                    stockTake.GPS_CORD__c = "Unknown GPS";
-                }
+                // Generate reference ID with timestamp
+                stockTake.GenerateRefId();
 
-                // Handle photo paths
+                // Set stock take date and user using helper methods
+                stockTake.SetStockTakeDate(DateTime.Now);
+                stockTake.SetStockTakeBy(_authService?.CurrentUser?.Name ?? "Unknown User");
+
+                // Set GPS coordinates using helper method
+                stockTake.SetGPSCoordinates(latitude, longitude);
+
+                // Handle photo paths using new field names
                 if (photoPaths != null && photoPaths.Count > 0)
                 {
-                    stockTake.Has_Photo = true;
-                    stockTake.Photo_Count = photoPaths.Count;
+                    stockTake.HasPhoto = true;
+                    stockTake.PhotoCount = photoPaths.Count;
                     stockTake.PhotoPath = photoPaths[0]; // Primary photo
                     stockTake.AllPhotoPaths = string.Join(";", photoPaths);
 
@@ -77,8 +99,8 @@ namespace RenewitSalesforceApp.Services
                 }
                 else
                 {
-                    stockTake.Has_Photo = false;
-                    stockTake.Photo_Count = 0;
+                    stockTake.HasPhoto = false;
+                    stockTake.PhotoCount = 0;
                 }
 
                 // Save to local database

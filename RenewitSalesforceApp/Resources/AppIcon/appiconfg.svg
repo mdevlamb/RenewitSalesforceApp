@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg">
-	<!-- Slightly smaller circle for adaptive icon padding -->
-	<circle cx="228" cy="228" r="160" fill="white"/>
+	<!-- Full canvas background to prevent Android masking -->
+	<rect width="456" height="456" fill="white"/>
+	<!-- Main logo circle with border -->
+	<circle cx="228" cy="228" r="180" fill="white"/>
 	<!-- Blue Left Half -->
 	<path d="M 228 68 A 160 160 0 0 0 228 388 L 228 228 Z" fill="#3E4A6B"/>
 	<!-- Red Right Half -->
 	<path d="M 228 68 A 160 160 0 0 1 228 388 L 228 228 Z" fill="#B91C3C"/>
 	<!-- White Vertical Separator Line -->
-	<line x1="228" y1="68" x2="228" y2="388" stroke="white" stroke-width="10"/>
+	<line x1="228" y1="68" x2="228" y2="388" stroke="white" stroke-width="20"/>
+	<!-- White border ring -->
+	<circle cx="228" cy="228" r="180" fill="none" stroke="white" stroke-width="20"/>
 </svg>

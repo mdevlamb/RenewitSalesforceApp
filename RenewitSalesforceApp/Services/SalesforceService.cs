@@ -452,9 +452,15 @@ namespace RenewitSalesforceApp.Services
             try
             {
                 Console.WriteLine($"[SalesforceService] Creating stock take record in Salesforce");
-
                 await EnsureAuthenticated();
 
+                // Ensure REFID is generated if not already set
+                if (string.IsNullOrEmpty(stockTakeRecord.REFID__c))
+                {
+                    stockTakeRecord.GenerateRefId();
+                }
+
+                // Format GPS coordinates for Salesforce
                 string gpsCoordinates = string.IsNullOrWhiteSpace(stockTakeRecord.GPS_CORD__c)
                     ? "Unknown GPS"
                     : stockTakeRecord.GPS_CORD__c;
@@ -462,30 +468,45 @@ namespace RenewitSalesforceApp.Services
                 // Map local record to Salesforce object
                 var salesforceRecord = new
                 {
+                    // Main identification fields
                     DISC_REG__c = stockTakeRecord.DISC_REG__c,
-                    //Vehicle_Registration__c = stockTakeRecord.Vehicle_Registration__c,
-                    //License_Number__c = stockTakeRecord.License_Number__c,
-                    REFID__c = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ssZ"),
-                    //Make__c = stockTakeRecord.Make__c,
-                    //Model__c = stockTakeRecord.Model__c,
-                    //Colour__c = stockTakeRecord.Colour__c,
-                    //Vehicle_Type__c = stockTakeRecord.Vehicle_Type__c,
-                    //VIN__c = stockTakeRecord.VIN__c,
-                    //Engine_Number__c = stockTakeRecord.Engine_Number__c,
-                    //License_Expiry_Date__c = stockTakeRecord.License_Expiry_Date__c,
+                    Vehicle_Registration__c = stockTakeRecord.Vehicle_Registration__c,
+                    License_Number__c = stockTakeRecord.License_Number__c,
+                    REFID__c = stockTakeRecord.REFID__c,
+
+                    // Vehicle details from barcode scan
+                    Make__c = stockTakeRecord.Make__c,
+                    Model__c = stockTakeRecord.Model__c,
+                    Colour__c = stockTakeRecord.Colour__c,
+                    Vehicle_Type__c = stockTakeRecord.Vehicle_Type__c,
+                    VIN__c = stockTakeRecord.VIN__c,
+                    Engine_Number__c = stockTakeRecord.Engine_Number__c,
+                    License_Expiry_Date__c = stockTakeRecord.License_Expiry_Date__c,
+
+                    // Location fields
                     Yards__c = stockTakeRecord.Yards__c,
                     Yard_Location__c = stockTakeRecord.Yard_Location__c,
+
+                    // GPS and Location data
                     GPS_CORD__c = gpsCoordinates,
-                    //Geo_Latitude__c = stockTakeRecord.Geo_Latitude__c,
-                    //Geo_Longitude__c = stockTakeRecord.Geo_Longitude__c,
-                    Comments__c = stockTakeRecord.Comments__c
-                    //Stock_Take_Date__c = stockTakeRecord.Stock_Take_Date.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    //Stock_Take_By__c = stockTakeRecord.Stock_Take_By,
-                    //Has_Photo__c = stockTakeRecord.Has_Photo,
-                    //Photo_Count__c = stockTakeRecord.Photo_Count
+                    Geo__Latitude__s = stockTakeRecord.LocalLatitude,
+                    Geo__Longitude__s = stockTakeRecord.LocalLongitude,
+
+                    // Comments and Notes
+                    Comments__c = stockTakeRecord.Comments__c,
+                    Notes__c = stockTakeRecord.Notes__c,
+
+                    // Stock take tracking
+                    Stock_Take_Date__c = stockTakeRecord.Stock_Take_Date__c,
+                    Stock_Take_By__c = stockTakeRecord.Stock_Take_By__c
                 };
 
-                Console.WriteLine($"[SalesforceService] Creating Yard_Stock_Take__c record");
+                Console.WriteLine($"[SalesforceService] Creating Yard_Stock_Take__c record with data:");
+                Console.WriteLine($"  Vehicle Registration: {salesforceRecord.Vehicle_Registration__c}");
+                Console.WriteLine($"  Make/Model: {salesforceRecord.Make__c} {salesforceRecord.Model__c}");
+                Console.WriteLine($"  Location: {salesforceRecord.Yards__c} - {salesforceRecord.Yard_Location__c}");
+                Console.WriteLine($"  GPS: {salesforceRecord.GPS_CORD__c}");
+                Console.WriteLine($"  Stock Take By: {salesforceRecord.Stock_Take_By__c}");
 
                 // Use your existing CreateRecordAsync method
                 var recordId = await CreateRecordAsync("Yard_Stock_Take__c", salesforceRecord);
@@ -496,6 +517,7 @@ namespace RenewitSalesforceApp.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"[SalesforceService] Error creating stock take record: {ex.Message}");
+                Console.WriteLine($"[SalesforceService] Exception details: {ex}");
                 return null;
             }
         }

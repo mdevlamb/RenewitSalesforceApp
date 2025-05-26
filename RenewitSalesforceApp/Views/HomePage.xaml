@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:converters="clr-namespace:RenewitSalesforceApp.Converters"
              x:Class="RenewitSalesforceApp.Views.HomePage"
-             Title="Login Page"
+             Title="Home Page"
              BackgroundColor="{AppThemeBinding Light=#f0f2f5, Dark=#121212}">
 
     <ContentPage.Resources>
@@ -123,6 +123,18 @@
                         Padding="0"
                         VerticalOptions="Center"
                         Clicked="OnSyncNowClicked"/>
+
+                <!-- Sync Status Indicator -->
+                <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                       x:Name="SyncIndicator"
+                       Text="Syncing..."
+                       FontSize="14"
+                       FontAttributes="Bold"
+                       TextColor="#007AFF"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center"
+                       IsVisible="False"
+                       Margin="0,8,0,0"/>
             </Grid>
         </Frame>
 

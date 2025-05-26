@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
-using RenewitSalesforceApp.Views;
 using RenewitSalesforceApp.Services;
+using RenewitSalesforceApp.Views;
 using ZXing.Net.Maui;
 using ZXing.Net.Maui.Controls;
 
@@ -15,7 +15,7 @@ namespace RenewitSalesforceApp
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()
-                .UseBarcodeReader()  // Add this for ZXing
+                .UseBarcodeReader()
                 .ConfigureFonts(fonts =>
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -26,7 +26,7 @@ namespace RenewitSalesforceApp
             string dbPath = Path.Combine(FileSystem.AppDataDirectory, "renewit_local.db3");
             Console.WriteLine($"DB path: {dbPath}");
 
-            // Register services
+            // Register services in correct order
             builder.Services.AddSingleton<SalesforceService>(sp =>
                 new SalesforceService(isProd: USE_PRODUCTION_SALESFORCE));
 
@@ -35,11 +35,13 @@ namespace RenewitSalesforceApp
 
             builder.Services.AddSingleton<AuthService>();
 
-            // Add the key service for stock takes
-            builder.Services.AddTransient<StockTakeService>();
+            // IMPORTANT: Change StockTakeService to Singleton so SyncService can use it
+            builder.Services.AddSingleton<StockTakeService>();
+
+            // SyncService depends on StockTakeService, so register after
             builder.Services.AddSingleton<SyncService>();
 
-            // Register pages
+            // Register pages as transient
             builder.Services.AddTransient<StockTakePage>();
 
             // Initialize database asynchronously

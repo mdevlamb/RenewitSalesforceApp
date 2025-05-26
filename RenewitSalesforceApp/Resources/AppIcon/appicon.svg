@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg">
-	<!-- White Circle Background -->
+	<!-- Outer White Border Circle -->
+	<circle cx="228" cy="228" r="228" fill="white"/>
+	<!-- Inner Background Circle -->
 	<circle cx="228" cy="228" r="200" fill="white"/>
 	<!-- Blue Left Half -->
 	<path d="M 228 28 A 200 200 0 0 0 228 428 L 228 228 Z" fill="#3E4A6B"/>
 	<!-- Red Right Half -->
 	<path d="M 228 28 A 200 200 0 0 1 228 428 L 228 228 Z" fill="#B91C3C"/>
-	<!-- White Vertical Separator Line -->
-	<line x1="228" y1="28" x2="228" y2="428" stroke="white" stroke-width="12"/>
+	<!-- White Vertical Separator Line - TWICE AS THICK -->
+	<line x1="228" y1="28" x2="228" y2="428" stroke="white" stroke-width="24"/>
+	<!-- Outer White Border Ring -->
+	<circle cx="228" cy="228" r="228" fill="none" stroke="white" stroke-width="28"/>
 </svg>

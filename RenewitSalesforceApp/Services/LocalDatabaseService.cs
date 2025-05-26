@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Threading;
+﻿using RenewitSalesforceApp.Models;
 using SQLite;
-using RenewitSalesforceApp.Models;
 
 namespace RenewitSalesforceApp.Services
 {
@@ -40,10 +36,8 @@ namespace RenewitSalesforceApp.Services
                 {
                     Console.WriteLine("Beginning database initialization");
 
-                    // Create tables for Renewit app - just users and stock takes
                     await _database.CreateTableAsync<LocalUser>();
                     await _database.CreateTableAsync<StockTakeRecord>();
-                    await _database.CreateTableAsync<PendingStockTake>();
 
                     _isInitialized = true;
                     Console.WriteLine("Database initialized successfully");
@@ -102,7 +96,7 @@ namespace RenewitSalesforceApp.Services
         {
             await EnsureInitializedAsync();
             return await _database.Table<StockTakeRecord>()
-                .OrderByDescending(s => s.Stock_Take_Date)
+                .OrderByDescending(s => s.Stock_Take_Date__c)
                 .ToListAsync();
         }
 
@@ -111,7 +105,7 @@ namespace RenewitSalesforceApp.Services
             await EnsureInitializedAsync();
             return await _database.Table<StockTakeRecord>()
                 .Where(s => !s.IsSynced)
-                .OrderByDescending(s => s.Stock_Take_Date)
+                .OrderByDescending(s => s.Stock_Take_Date__c)
                 .ToListAsync();
         }
 
@@ -152,34 +146,6 @@ namespace RenewitSalesforceApp.Services
                 Console.WriteLine($"[LocalDatabaseService] Error marking stock take as synced: {ex.Message}");
                 return false;
             }
-        }
-        #endregion
-
-        #region Pending Stock Take Methods
-        public async Task<List<PendingStockTake>> GetPendingStockTakesAsync()
-        {
-            await EnsureInitializedAsync();
-            return await _database.Table<PendingStockTake>()
-                .Where(s => !s.IsSynced)
-                .ToListAsync();
-        }
-
-        public async Task<int> SavePendingStockTakeAsync(PendingStockTake stockTake)
-        {
-            await EnsureInitializedAsync();
-            return await _database.InsertAsync(stockTake);
-        }
-
-        public async Task<int> UpdatePendingStockTakeAsync(PendingStockTake stockTake)
-        {
-            await EnsureInitializedAsync();
-            return await _database.UpdateAsync(stockTake);
-        }
-
-        public async Task<int> DeletePendingStockTakeAsync(int id)
-        {
-            await EnsureInitializedAsync();
-            return await _database.DeleteAsync<PendingStockTake>(id);
         }
         #endregion
     }

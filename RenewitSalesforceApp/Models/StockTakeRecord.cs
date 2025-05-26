@@ -11,47 +11,52 @@ namespace RenewitSalesforceApp.Models
         // Salesforce ID (populated after sync)
         public string Id { get; set; }
 
-        // Salesforce Name field (usually auto-generated)
+        // Salesforce Name field (auto-generated SF record ID)
         public string Name { get; set; }
 
         // Main identification fields
-        public string DISC_REG__c { get; set; }           // Full license disk barcode data
-        public string Vehicle_Registration__c { get; set; } // Extracted vehicle registration number
-        public string License_Number__c { get; set; }     // License/Registration Number
-        public string REFID__c { get; set; }              // Reference ID
-        public string Ref_No__c { get; set; }             // Reference Number
+        public string DISC_REG__c { get; set; }           // Full license disk barcode data (SF)
+        public string Vehicle_Registration__c { get; set; } // Extracted vehicle registration number (SF)
+        public string License_Number__c { get; set; }     // License/Registration Number (SF)
+        public string REFID__c { get; set; }              // Reference ID - auto-populated with datetime (SF)
+        // public string Ref_No__c { get; set; }          // Reference Number - not needed
 
         // Vehicle details extracted from barcode scan
-        public string Make__c { get; set; }               // Vehicle make (e.g., VOLKSWAGEN)
-        public string Model__c { get; set; }              // Vehicle model (e.g., VW 216 T-CROSS)
-        public string Colour__c { get; set; }             // Vehicle colour (e.g., Black / Swart)
-        public string Vehicle_Type__c { get; set; }       // Vehicle type (e.g., Hatch back / Luikrug)
-        public string VIN__c { get; set; }                // VIN number (e.g., WVGZZZC1ZLY056933)
-        public string Engine_Number__c { get; set; }      // Engine number (e.g., DKJ048733)
-        public string License_Expiry_Date__c { get; set; } // License disk expiry date (e.g., 2025-05-31)
+        public string Make__c { get; set; }               // Vehicle make (e.g., VOLKSWAGEN) (SF)
+        public string Model__c { get; set; }              // Vehicle model (e.g., VW 216 T-CROSS) (SF)
+        public string Colour__c { get; set; }             // Vehicle colour (e.g., Black / Swart) (SF)
+        public string Vehicle_Type__c { get; set; }       // Vehicle type (e.g., Hatch back / Luikrug) (SF)
+        public string VIN__c { get; set; }                // VIN number (e.g., WVGZZZC1ZLY056933) (SF)
+        public string Engine_Number__c { get; set; }      // Engine number (e.g., DKJ048733) (SF)
+        public string License_Expiry_Date__c { get; set; } // License disk expiry date (e.g., 2025-05-31) (SF)
 
         // Location fields - matching Salesforce object structure
-        public string Yards__c { get; set; }              // Yard Names picklist from Salesforce
-        public string Yard_Location__c { get; set; }      // Yard Location picklist from Salesforce
+        public string Yards__c { get; set; }              // Branch Names picklist from Salesforce (SF)
+        public string Yard_Location__c { get; set; }      // Department Location picklist from Salesforce (SF)
 
         // GPS and Location data
-        public string GPS_CORD__c { get; set; }           // GPS coordinates as text
-        public double? Geo_Latitude__c { get; set; }      // Geolocation latitude
-        public double? Geo_Longitude__c { get; set; }     // Geolocation longitude
+        public string Geo__c { get; set; }                // Salesforce Geolocation field (uses __Latitude__s and __Longitude__s subfields) (SF)
+        public string GPS_CORD__c { get; set; }           // GPS coordinates as comma-separated string "latitude,longitude" (SF)
+        public double? LocalLatitude { get; set; }        // Local-only latitude storage
+        public double? LocalLongitude { get; set; }       // Local-only longitude storage
 
         // Comments and Notes
-        public string Comments__c { get; set; }           // Comments
-        public string Notes__c { get; set; }              // Notes (External ID)
+        public string Comments__c { get; set; }           // Comments (SF)
+        public string Notes__c { get; set; }              // Notes - External ID (SF)
 
-        // Stock take tracking (local fields)
-        public DateTime Stock_Take_Date { get; set; }     // When stock take was done
-        public string Stock_Take_By { get; set; }         // Who did the stock take
+        // Stock take tracking - now Salesforce fields
+        public string Stock_Take_Date__c { get; set; }    // When stock take was done - Date field in SF (SF)
+        public string Stock_Take_By__c { get; set; }      // Who did the stock take - Text field in SF (SF)
 
-        // Photo information (local fields)
-        public bool Has_Photo { get; set; }               // Whether photos were taken
-        public int Photo_Count { get; set; }              // Number of photos
-        public string PhotoPath { get; set; }             // Primary photo path
-        public string AllPhotoPaths { get; set; }         // All photo paths (semicolon separated)
+        // Local tracking fields (for app use only)
+        public DateTime LocalStockTakeDate { get; set; }  // Local DateTime for app logic
+        public string LocalStockTakeBy { get; set; }      // Local user info for app logic
+
+        // Photo information (local fields only - not synced to SF)
+        public bool HasPhoto { get; set; }                // Whether photos were taken (Local)
+        public int PhotoCount { get; set; }               // Number of photos (Local)
+        public string PhotoPath { get; set; }             // Primary photo path (Local)
+        public string AllPhotoPaths { get; set; }         // All photo paths (semicolon separated) (Local)
 
         // Sync tracking (local only)
         [Indexed]
@@ -60,6 +65,51 @@ namespace RenewitSalesforceApp.Models
         public int SyncAttempts { get; set; }
         public string SyncErrorMessage { get; set; }
 
+        // Helper methods
+        /// <summary>
+        /// Sets GPS coordinates for both local storage and Salesforce fields
+        /// </summary>
+        public void SetGPSCoordinates(double? latitude, double? longitude)
+        {
+            LocalLatitude = latitude;
+            LocalLongitude = longitude;
+
+            if (latitude.HasValue && longitude.HasValue)
+            {
+                // For GPS_CORD__c (simple comma-separated string)
+                GPS_CORD__c = $"{latitude.Value:F6},{longitude.Value:F6}";
+
+                // For Geo__c (Salesforce geolocation field - formatted for API)
+                Geo__c = null;
+            }
+        }
+
+        /// <summary>
+        /// Sets the stock take date for both local and Salesforce fields
+        /// </summary>
+        public void SetStockTakeDate(DateTime dateTime)
+        {
+            LocalStockTakeDate = dateTime;
+            Stock_Take_Date__c = dateTime.ToString("yyyy-MM-dd"); // SF Date format
+        }
+
+        /// <summary>
+        /// Sets the stock take user for both local and Salesforce fields
+        /// </summary>
+        public void SetStockTakeBy(string userName)
+        {
+            LocalStockTakeBy = userName;
+            Stock_Take_By__c = userName;
+        }
+
+        /// <summary>
+        /// Auto-generates REFID with current timestamp
+        /// </summary>
+        public void GenerateRefId()
+        {
+            REFID__c = DateTime.Now.ToString("yyyyMMddHHmmss");
+        }
+
         // Helper properties
         public string DisplayName => !string.IsNullOrEmpty(Vehicle_Registration__c) ?
             $"Registration: {Vehicle_Registration__c}" :
@@ -67,6 +117,9 @@ namespace RenewitSalesforceApp.Models
 
         public string VehicleInfo => !string.IsNullOrEmpty(Make__c) && !string.IsNullOrEmpty(Model__c) ?
             $"{Make__c} {Model__c}" : "Vehicle details not scanned";
+
+        public string LocationInfo => !string.IsNullOrEmpty(Yards__c) && !string.IsNullOrEmpty(Yard_Location__c) ?
+            $"{Yards__c} - {Yard_Location__c}" : "Location not set";
     }
 
     // Fallback offline values - these will be used if Salesforce is unavailable

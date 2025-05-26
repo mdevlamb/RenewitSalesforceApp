@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:converters="clr-namespace:RenewitSalesforceApp.Converters"
              x:Class="RenewitSalesforceApp.Views.StockTakePage"
-             Title="Home Page"
-             BackgroundColor="{AppThemeBinding Light=#f0f2f5, Dark=#121212}">
+             Title="Stock Take"
+             BackgroundColor="{AppThemeBinding Light=#f8f9fa, Dark=#121212}">
 
     <ContentPage.Resources>
         <ResourceDictionary>
@@ -14,448 +14,478 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="20">
+    <Grid>
+        <!-- Main Content Grid -->
+        <Grid x:Name="MainContentGrid" RowDefinitions="Auto,Auto,*,Auto">
 
-        <!-- Connectivity Status -->
-        <Frame Grid.Row="0" 
-               BackgroundColor="{Binding IsOfflineMode, Converter={StaticResource ConnectivityColorConverter}}"
-               HasShadow="False"
-               CornerRadius="15"
-               HeightRequest="35"
-               Padding="12,0"
-               HorizontalOptions="Center"
-               VerticalOptions="Start"
-               Margin="0,5,0,10">
-            <HorizontalStackLayout HorizontalOptions="Center" 
-                                  Spacing="8" 
-                                  VerticalOptions="Center">
-                <!-- Connectivity Icon -->
-                <Label Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityIconConverter}}"
-                       FontFamily="MaterialIcons"
-                       FontSize="16"
-                       TextColor="White"
-                       VerticalOptions="Center" />
-                <!-- Status text -->
-                <Label Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityTextConverter}}"
-                       FontSize="13"
-                       FontAttributes="Bold"
-                       TextColor="White"
-                       VerticalOptions="Center" />
-            </HorizontalStackLayout>
-        </Frame>
+            <!-- Connectivity Status -->
+            <Frame Grid.Row="0" 
+                   BackgroundColor="{Binding IsOfflineMode, Converter={StaticResource ConnectivityColorConverter}}"
+                   HasShadow="False"
+                   CornerRadius="15"
+                   HeightRequest="32"
+                   Padding="10,0"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Start"
+                   Margin="0,8,0,5">
+                <HorizontalStackLayout HorizontalOptions="Center" 
+                                      Spacing="6" 
+                                      VerticalOptions="Center">
+                    <Label Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityIconConverter}}"
+                           FontFamily="MaterialIcons"
+                           FontSize="14"
+                           TextColor="White"
+                           VerticalOptions="Center" />
+                    <Label Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityTextConverter}}"
+                           FontSize="12"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Frame>
 
-        <!-- Header -->
-        <Grid Grid.Row="1" ColumnDefinitions="*" Margin="0,10,0,20">
-            <!-- License Disk Scanner -->
-            <VerticalStackLayout Grid.Column="0" Spacing="10" HorizontalOptions="Center">
-                <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#f0f0f0}"
-                       BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#666666}"
-                       CornerRadius="20"
-                       Padding="15"
-                       WidthRequest="75"
-                       HeightRequest="75"
-                       HorizontalOptions="Center"
-                       HasShadow="True">
-                    <Frame.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnLicenseDiskScanClicked"/>
-                    </Frame.GestureRecognizers>
-                    <Image Source="Images/barcode.png"
-                           WidthRequest="40"
-                           HeightRequest="40"
-                           Aspect="AspectFit"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center"/>
-                </Frame>
-                <Label Text="License Disk"
-                       FontSize="13"
+            <!-- Header with Scan Button -->
+            <Grid Grid.Row="1" 
+                  ColumnDefinitions="*,Auto" 
+                  Padding="20,10,20,5"
+                  BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}">
+                <Label Grid.Column="0"
+                       Text="Vehicle Stock Take"
+                       FontSize="20"
                        FontAttributes="Bold"
                        TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
-                       HorizontalOptions="Center"/>
-                <Label Text="Scanner"
-                       FontSize="13"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
-                       HorizontalOptions="Center"
-                       Margin="0,-3,0,0"/>
-            </VerticalStackLayout>
-        </Grid>
+                       VerticalOptions="Center"/>
 
-        <!-- Main Form -->
-        <ScrollView Grid.Row="2">
-            <VerticalStackLayout Spacing="25">
+                <!-- Scan Button -->
+                <ImageButton Grid.Column="1"
+                     Source="barcode.png"
+                     BackgroundColor="{AppThemeBinding Light=#f0f8ff, Dark=#3a4a65}"
+                     BorderColor="{AppThemeBinding Light=#007AFF, Dark=#4a90e2}"
+                     BorderWidth="1"
+                     CornerRadius="12"
+                     WidthRequest="60"
+                     HeightRequest="50"
+                     Padding="12"
+                     Aspect="AspectFit"
+                     Clicked="OnLicenseDiskScanClicked"/>
+            </Grid>
 
-                <!-- Item Identification Section -->
-                <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
-                       BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
-                       CornerRadius="12"
-                       HasShadow="True"
-                       Padding="25,20">
-                    <VerticalStackLayout Spacing="18">
-                        <Label Text="Item Identification"
-                               FontSize="16"
-                               FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
+            <!-- Main Content -->
+            <ScrollView Grid.Row="2" Padding="20,10">
+                <VerticalStackLayout Spacing="25">
 
-                        <!-- Vehicle Registration -->
-                        <VerticalStackLayout Spacing="5">
-                            <StackLayout Orientation="Horizontal" Spacing="3">
+                    <!-- VEHICLE REGISTRATION (Required) -->
+                    <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
+                           BorderColor="{AppThemeBinding Light=#007AFF, Dark=#4a90e2}"
+                           CornerRadius="12"
+                           HasShadow="True"
+                           Padding="20">
+                        <VerticalStackLayout Spacing="15">
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="&#xe8d5;"
+                                       FontFamily="MaterialIcons"
+                                       FontSize="20"
+                                       TextColor="#007AFF"
+                                       VerticalOptions="Center"/>
                                 <Label Text="Vehicle Registration"
-                                       FontSize="14"
-                                       TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                                <Label Text="*" 
-                                       FontSize="14" 
-                                       TextColor="Red" 
-                                       IsVisible="{Binding DiscRegRequired}"/>
-                            </StackLayout>
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                       VerticalOptions="Center"/>
+                                <Label Text="*"
+                                       FontSize="18"
+                                       TextColor="Red"
+                                       VerticalOptions="Center"/>
+                            </HorizontalStackLayout>
+
                             <Entry x:Name="VehicleRegEntry"
-                                   Placeholder="Enter vehicle registration"
+                                   Placeholder="Enter vehicle reg or scan license disk"
                                    BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                                   TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-                        </VerticalStackLayout>
-
-                        <!-- Full Barcode Data (DISC_REG) -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="License Disk Barcode (DISC_REG)"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="DiscRegEntry"
-                                   Placeholder="Full barcode data from scan"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
-                        </VerticalStackLayout>
-
-                        <!-- License Number -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="License Number"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="LicenseEntry"
-                                   Placeholder="Enter license number"
-                                   BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                                   TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-                        </VerticalStackLayout>
-
-                        <!-- Reference ID -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="Reference ID"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="RefIdEntry"
-                                   Placeholder="Enter reference ID"
-                                   BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                                   TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-                        </VerticalStackLayout>
-                    </VerticalStackLayout>
-                </Frame>
-
-                <!-- Vehicle Details Section -->
-                <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
-                       BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
-                       CornerRadius="12"
-                       HasShadow="True"
-                       Padding="25,20">
-                    <VerticalStackLayout Spacing="18">
-                        <StackLayout Orientation="Horizontal" Spacing="5">
-                            <Label Text="Vehicle Details"
-                                   FontSize="16"
-                                   FontAttributes="Bold"
                                    TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
-                                   VerticalOptions="Center"/>
-                            <Label Text="(populated from scan)"
-                                   FontSize="12"
-                                   FontAttributes="Italic"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
-                                   VerticalOptions="Center"/>
-                        </StackLayout>
-
-                        <!-- Make -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="Make"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="MakeEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+                                   FontSize="16"
+                                   HeightRequest="50"
+                                   TextChanged="OnVehicleRegChanged"/>
                         </VerticalStackLayout>
+                    </Frame>
 
-                        <!-- Model -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="Model"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="ModelEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+                    <!-- Rest of your existing frames and content stays the same -->
+                    <!-- SCANNED VEHICLE DETAILS -->
+                    <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
+                           BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
+                           CornerRadius="12"
+                           HasShadow="True"
+                           Padding="20">
+                        <VerticalStackLayout Spacing="15">
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="&#xe8b6;"
+                                       FontFamily="MaterialIcons"
+                                       FontSize="20"
+                                       TextColor="#28a745"
+                                       VerticalOptions="Center"/>
+                                <Label Text="Vehicle Details"
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                       VerticalOptions="Center"/>
+                                <Label Text="(from license disk scan)"
+                                       FontSize="12"
+                                       FontAttributes="Italic"
+                                       TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
+                                       VerticalOptions="Center"/>
+                            </HorizontalStackLayout>
+
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+
+                                <!-- License Number -->
+                                <Entry Grid.Row="0" Grid.Column="0"
+                                       x:Name="LicenseEntry"
+                                       Placeholder="License Number"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- Make -->
+                                <Entry Grid.Row="0" Grid.Column="1"
+                                       x:Name="MakeEntry"
+                                       Placeholder="Make"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- Model -->
+                                <Entry Grid.Row="1" Grid.Column="0"
+                                       x:Name="ModelEntry"
+                                       Placeholder="Model"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- Color -->
+                                <Entry Grid.Row="1" Grid.Column="1"
+                                       x:Name="ColourEntry"
+                                       Placeholder="Color"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- Vehicle Type -->
+                                <Entry Grid.Row="2" Grid.Column="0"
+                                       x:Name="VehicleTypeEntry"
+                                       Placeholder="Vehicle Type"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- VIN -->
+                                <Entry Grid.Row="2" Grid.Column="1"
+                                       x:Name="VinEntry"
+                                       Placeholder="VIN Number"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- Engine Number -->
+                                <Entry Grid.Row="3" Grid.Column="0"
+                                       x:Name="EngineEntry"
+                                       Placeholder="Engine Number"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- License Expiry -->
+                                <Entry Grid.Row="3" Grid.Column="1"
+                                       x:Name="ExpiryDateEntry"
+                                       Placeholder="License Expiry"
+                                       IsReadOnly="True"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+
+                                <!-- Disc Registration Data (Hidden) -->
+                                <Entry Grid.Row="4" Grid.ColumnSpan="2"
+                                       x:Name="DiscRegEntry"
+                                       Placeholder="Full barcode data"
+                                       IsReadOnly="True"
+                                       IsVisible="False"
+                                       BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
+                                       TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+                            </Grid>
                         </VerticalStackLayout>
+                    </Frame>
 
-                        <!-- Colour -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="Colour"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="ColourEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
+                    <!-- LOCATION ASSIGNMENT (Required) -->
+                    <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
+                           BorderColor="{AppThemeBinding Light=#ff6b35, Dark=#ff8c5a}"
+                           CornerRadius="12"
+                           HasShadow="True"
+                           Padding="20">
+                        <VerticalStackLayout Spacing="15">
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="&#xe55c;"
+                                       FontFamily="MaterialIcons"
+                                       FontSize="20"
+                                       TextColor="#ff6b35"
+                                       VerticalOptions="Center"/>
+                                <Label Text="Location Assignment"
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                       VerticalOptions="Center"/>
+                                <Label Text="*"
+                                       FontSize="18"
+                                       TextColor="Red"
+                                       VerticalOptions="Center"/>
+                            </HorizontalStackLayout>
+
+                            <!-- Branch -->
+                            <VerticalStackLayout Spacing="5">
+                                <HorizontalStackLayout Spacing="3">
+                                    <Label Text="Branch"
+                                           FontSize="14"
+                                           FontAttributes="Bold"
+                                           TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
+                                    <Label Text="*"
+                                           FontSize="14"
+                                           TextColor="Red"/>
+                                </HorizontalStackLayout>
+                                <Picker x:Name="BranchPicker"
+                                        Title="Select branch"
+                                        BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
+                                        TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                        HeightRequest="50"
+                                        SelectedIndexChanged="OnLocationFieldChanged"/>
+                            </VerticalStackLayout>
+
+                            <!-- Department -->
+                            <VerticalStackLayout Spacing="5">
+                                <HorizontalStackLayout Spacing="3">
+                                    <Label Text="Department"
+                                           FontSize="14"
+                                           FontAttributes="Bold"
+                                           TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
+                                    <Label Text="*"
+                                           FontSize="14"
+                                           TextColor="Red"/>
+                                </HorizontalStackLayout>
+                                <Picker x:Name="DepartmentPicker"
+                                        Title="Select department"
+                                        BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
+                                        TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                        HeightRequest="50"
+                                        SelectedIndexChanged="OnLocationFieldChanged"/>
+                            </VerticalStackLayout>
                         </VerticalStackLayout>
+                    </Frame>
 
-                        <!-- Vehicle Type -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="Vehicle Type"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="VehicleTypeEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
-                        </VerticalStackLayout>
+                    <!-- GPS & PHOTOS (Optional) -->
+                    <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
+                           BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
+                           CornerRadius="12"
+                           HasShadow="True"
+                           Padding="20">
+                        <VerticalStackLayout Spacing="15">
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="&#xe3b0;"
+                                       FontFamily="MaterialIcons"
+                                       FontSize="20"
+                                       TextColor="#6c757d"
+                                       VerticalOptions="Center"/>
+                                <Label Text="GPS &amp; Photos"
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                       VerticalOptions="Center"/>
+                                <Label Text="(optional)"
+                                       FontSize="12"
+                                       FontAttributes="Italic"
+                                       TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
+                                       VerticalOptions="Center"/>
+                            </HorizontalStackLayout>
 
-                        <!-- VIN Number -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="VIN Number"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="VinEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
-                        </VerticalStackLayout>
-
-                        <!-- Engine Number -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="Engine Number"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="EngineEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
-                        </VerticalStackLayout>
-
-                        <!-- License Expiry Date -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="License Expiry Date"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                            <Entry x:Name="ExpiryDateEntry"
-                                   Placeholder="Scanned from license disk"
-                                   IsReadOnly="True"
-                                   BackgroundColor="{AppThemeBinding Light=#f0f0f0, Dark=#1a1a1a}"
-                                   TextColor="{AppThemeBinding Light=#555555, Dark=#cccccc}"/>
-                        </VerticalStackLayout>
-                    </VerticalStackLayout>
-                </Frame>
-
-                <!-- Location Section -->
-                <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
-                       BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
-                       CornerRadius="12"
-                       HasShadow="True"
-                       Padding="25,20">
-                    <VerticalStackLayout Spacing="18">
-                        <Label Text="Location"
-                               FontSize="16"
-                               FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-
-                        <!-- Yard (Branch) -->
-                        <VerticalStackLayout Spacing="5">
-                            <StackLayout Orientation="Horizontal" Spacing="3">
-                                <Label Text="Branch"
-                                       FontSize="14"
-                                       TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                                <Label Text="*" 
-                                       FontSize="14" 
-                                       TextColor="Red" 
-                                       IsVisible="{Binding YardRequired}"/>
-                            </StackLayout>
-                            <Picker x:Name="YardPicker"
-                                    Title="Select the branch"
-                                    BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                                    TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-                        </VerticalStackLayout>
-
-                        <!-- Yard Location -->
-                        <VerticalStackLayout Spacing="5">
-                            <StackLayout Orientation="Horizontal" Spacing="3">
-                                <Label Text="Department"
-                                       FontSize="14"
-                                       TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
-                                <Label Text="*" 
-                                       FontSize="14" 
-                                       TextColor="Red" 
-                                       IsVisible="{Binding YardLocationRequired}"/>
-                            </StackLayout>
-                            <Picker x:Name="YardLocationPicker"
-                                    Title="Select the department"
-                                    BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                                    TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-                        </VerticalStackLayout>
-
-                        <!-- GPS Coordinates -->
-                        <VerticalStackLayout Spacing="5">
-                            <Label Text="GPS Coordinates"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
+                            <!-- GPS Coordinates -->
                             <Frame BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
                                    BorderColor="{AppThemeBinding Light=#e2e8f0, Dark=#3a3a3a}"
                                    CornerRadius="8"
-                                   Padding="10">
-                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
-                                    <Label Grid.Column="0"
-                                           x:Name="GpsLabel"
+                                   Padding="15,15,10,15">
+                                <HorizontalStackLayout Spacing="8">
+                                    <Label x:Name="GpsLabel"
                                            Text="Getting current location..."
                                            FontSize="14"
                                            TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
-                                           VerticalOptions="Center"/>
-                                    <!-- Map Preview Pin -->
-                                    <Button Grid.Column="1"
-                                            x:Name="MapPreviewButton"
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="StartAndExpand"
+                                           MaxLines="1"
+                                           LineBreakMode="TailTruncation"/>
+
+                                    <!-- Map Preview -->
+                                    <Button x:Name="MapPreviewButton"
                                             Text="&#xe55f;"
                                             FontFamily="MaterialIcons"
-                                            FontSize="18"
+                                            FontSize="20"
                                             TextColor="#FF6B35"
                                             BackgroundColor="Transparent"
                                             Clicked="OnMapPreviewClicked"
-                                            WidthRequest="35"
-                                            HeightRequest="35"
-                                            Padding="0"
-                                            Margin="0"
+                                            Padding="5,0"
+                                            WidthRequest="40"
+                                            HeightRequest="40"
                                             IsVisible="False"/>
-                                    <!-- Get Location Button -->
-                                    <Button Grid.Column="2"
-                                            Text="&#xe55c;"
+
+                                    <!-- Get Location -->
+                                    <Button Text="&#xe55c;"
                                             FontFamily="MaterialIcons"
-                                            FontSize="18"
+                                            FontSize="20"
                                             TextColor="#007AFF"
                                             BackgroundColor="Transparent"
                                             Clicked="OnGetLocationClicked"
-                                            WidthRequest="35"
-                                            HeightRequest="35"
-                                            Padding="0"
-                                            Margin="0"/>
+                                            Padding="5,0"
+                                            WidthRequest="40"
+                                            HeightRequest="40"/>
+                                </HorizontalStackLayout>
+                            </Frame>
+
+                            <!-- Photos -->
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0"
+                                       Text="Photos"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                       VerticalOptions="Center"/>
+                                <Button Grid.Column="1"
+                                        Text="&#xe3b0;"
+                                        FontFamily="MaterialIcons"
+                                        FontSize="24"
+                                        TextColor="#007AFF"
+                                        BackgroundColor="{AppThemeBinding Light=#f0f8ff, Dark=#1a2332}"
+                                        BorderColor="#007AFF"
+                                        BorderWidth="1"
+                                        CornerRadius="8"
+                                        WidthRequest="50"
+                                        HeightRequest="50"
+                                        Clicked="OnTakePhotoClicked"/>
+                            </Grid>
+
+                            <!-- Photo Preview -->
+                            <Frame x:Name="PhotoFrame"
+                                   BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
+                                   BorderColor="{AppThemeBinding Light=#e2e8f0, Dark=#3a3a3a}"
+                                   CornerRadius="8"
+                                   HeightRequest="120"
+                                   IsVisible="False">
+                                <Grid>
+                                    <Image x:Name="PhotoPreview" Aspect="AspectFit"/>
+                                    <Frame BackgroundColor="Black"
+                                           CornerRadius="10"
+                                           Padding="8,4"
+                                           HasShadow="False"
+                                           HorizontalOptions="End"
+                                           VerticalOptions="Start"
+                                           Margin="10">
+                                        <Label x:Name="PhotoCountLabel"
+                                               Text="1 photo"
+                                               TextColor="White"
+                                               FontSize="12"/>
+                                    </Frame>
                                 </Grid>
                             </Frame>
+
+                            <!-- No Photos Placeholder -->
+                            <Frame x:Name="NoPhotoFrame"
+                                   BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
+                                   BorderColor="{AppThemeBinding Light=#e2e8f0, Dark=#3a3a3a}"
+                                   CornerRadius="8"
+                                   HeightRequest="100">
+                                <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="8">
+                                    <Label Text="&#xe3b0;"
+                                           FontFamily="MaterialIcons"
+                                           FontSize="32"
+                                           TextColor="{AppThemeBinding Light=#cccccc, Dark=#555555}"
+                                           HorizontalOptions="Center"/>
+                                    <Label Text="No photos taken"
+                                           FontSize="14"
+                                           TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
+                                           HorizontalOptions="Center"/>
+                                </VerticalStackLayout>
+                            </Frame>
                         </VerticalStackLayout>
-                    </VerticalStackLayout>
-                </Frame>
+                    </Frame>
 
-                <!-- Photos Section -->
-                <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
-                       BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
-                       CornerRadius="12"
-                       HasShadow="True"
-                       Padding="25,20">
-                    <VerticalStackLayout Spacing="18">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
-                            <Label Grid.Column="0"
-                                   Text="Photos"
-                                   FontSize="16"
-                                   FontAttributes="Bold"
-                                   TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
-                                   VerticalOptions="Center"/>
-                            <Button Grid.Column="1"
-                                    Text="&#xe3b0;"
-                                    FontFamily="MaterialIcons"
-                                    FontSize="20"
-                                    TextColor="#007AFF"
-                                    BackgroundColor="Transparent"
-                                    Clicked="OnTakePhotoClicked"
-                                    WidthRequest="35"
-                                    HeightRequest="35"
-                                    Padding="0"
-                                    Margin="0"/>
-                        </Grid>
-
-                        <!-- Photo Preview Area -->
-                        <Frame x:Name="PhotoFrame"
-                               BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                               BorderColor="{AppThemeBinding Light=#e2e8f0, Dark=#3a3a3a}"
-                               CornerRadius="8"
-                               HeightRequest="120"
-                               IsVisible="False">
-                            <Grid>
-                                <Image x:Name="PhotoPreview"
-                                       Aspect="AspectFit"/>
-                                <Frame BackgroundColor="Black"
-                                       CornerRadius="10"
-                                       Padding="8,4"
-                                       HasShadow="False"
-                                       HorizontalOptions="End"
-                                       VerticalOptions="Start"
-                                       Margin="10">
-                                    <Label x:Name="PhotoCountLabel"
-                                           Text="1 photo"
-                                           TextColor="White"
-                                           FontSize="12"/>
-                                </Frame>
-                            </Grid>
-                        </Frame>
-
-                        <!-- No Photos Placeholder -->
-                        <Frame x:Name="NoPhotoFrame"
-                               BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                               BorderColor="{AppThemeBinding Light=#e2e8f0, Dark=#3a3a3a}"
-                               CornerRadius="8"
-                               HeightRequest="120">
-                            <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="10">
-                                <Label Text="&#xe3b0;"
+                    <!-- COMMENTS (Optional) -->
+                    <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
+                           BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
+                           CornerRadius="12"
+                           HasShadow="True"
+                           Padding="20">
+                        <VerticalStackLayout Spacing="15">
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="&#xe0b9;"
                                        FontFamily="MaterialIcons"
-                                       FontSize="40"
-                                       TextColor="{AppThemeBinding Light=#cccccc, Dark=#555555}"
-                                       HorizontalOptions="Center"/>
-                                <Label Text="No photos taken"
-                                       FontSize="14"
+                                       FontSize="20"
+                                       TextColor="#6c757d"
+                                       VerticalOptions="Center"/>
+                                <Label Text="Comments"
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                       VerticalOptions="Center"/>
+                                <Label Text="(optional)"
+                                       FontSize="12"
+                                       FontAttributes="Italic"
                                        TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
-                                       HorizontalOptions="Center"/>
-                            </VerticalStackLayout>
-                        </Frame>
-                    </VerticalStackLayout>
-                </Frame>
+                                       VerticalOptions="Center"/>
+                            </HorizontalStackLayout>
 
-                <!-- Notes Section -->
-                <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
-                       BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
-                       CornerRadius="12"
-                       HasShadow="True"
-                       Padding="25,20">
-                    <VerticalStackLayout Spacing="18">
-                        <Label Text="Comments"
-                               FontSize="16"
-                               FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
+                            <Editor x:Name="CommentsEditor"
+                                    Placeholder="Add any comments or notes..."
+                                    HeightRequest="100"
+                                    BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
+                                    TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                                    TextChanged="OnCommentsChanged"/>
+                        </VerticalStackLayout>
+                    </Frame>
 
-                        <Editor x:Name="CommentsEditor"
-                                Placeholder="Add any comments or notes..."
-                                HeightRequest="100"
-                                BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
-                                TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
-                    </VerticalStackLayout>
-                </Frame>
+                </VerticalStackLayout>
+            </ScrollView>
 
-            </VerticalStackLayout>
-        </ScrollView>
+            <!-- Submit Button -->
+            <Grid Grid.Row="3" Margin="20,15">
+                <Button x:Name="SubmitButton"
+                        Text="Submit Stock Take"
+                        BackgroundColor="#28a745"
+                        TextColor="White"
+                        FontAttributes="Bold"
+                        FontSize="18"
+                        CornerRadius="28"
+                        HeightRequest="60"
+                        Clicked="OnSubmitClicked"/>
+            </Grid>
+        </Grid>
 
-        <!-- Submit Button -->
-        <Grid Grid.Row="3" Margin="0,30,0,15">
-            <Button x:Name="SubmitButton"
-                    Text="SUBMIT STOCK TAKE"
-                    BackgroundColor="#28a745"
-                    TextColor="White"
-                    FontAttributes="Bold"
-                    FontSize="16"
-                    CornerRadius="28"
-                    HeightRequest="56"
-                    Clicked="OnSubmitClicked"/>
+        <!-- Full-Screen Loading Overlay -->
+        <Grid x:Name="FullScreenLoadingOverlay" 
+              BackgroundColor="#80000000"
+              IsVisible="False">
+            <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#333333}"
+                   CornerRadius="12"
+                   HasShadow="True"
+                   WidthRequest="220" 
+                   HeightRequest="120"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center">
+                <VerticalStackLayout Spacing="15" 
+                                     HorizontalOptions="Center" 
+                                     VerticalOptions="Center">
+                    <ActivityIndicator IsRunning="True" 
+                                      Color="#28a745" 
+                                      HeightRequest="40" 
+                                      WidthRequest="40"
+                                      HorizontalOptions="Center"/>
+                    <Label Text="Processing..." 
+                          TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                          FontAttributes="Bold"
+                          FontSize="16"
+                          HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
         </Grid>
     </Grid>
 </ContentPage>
