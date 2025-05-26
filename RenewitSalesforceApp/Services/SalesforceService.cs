@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using RenewitSalesforceApp.Models;
 
 namespace RenewitSalesforceApp.Services
 {
@@ -373,6 +374,131 @@ namespace RenewitSalesforceApp.Services
                 throw;
             }
         }
+
+        /// <summary>
+        /// Gets picklist values for a specific field on a Salesforce object
+        /// </summary>
+        /// <param name="objectName">Salesforce object name (e.g., "Yard_Stock_Take__c")</param>
+        /// <param name="fieldName">Field name (e.g., "Yards__c")</param>
+        /// <returns>List of picklist values</returns>
+        public async Task<List<string>> GetPicklistValues(string objectName, string fieldName)
+        {
+            try
+            {
+                Console.WriteLine($"[SalesforceService] Getting picklist values for {objectName}.{fieldName}");
+
+                if (string.IsNullOrEmpty(AccessToken))
+                {
+                    Console.WriteLine("[SalesforceService] No access token available");
+                    return null;
+                }
+
+                var client = new HttpClient();
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AccessToken);
+
+                // Use Salesforce REST API to describe the object
+                var describeUrl = $"{InstanceUrl}/services/data/v58.0/sobjects/{objectName}/describe";
+
+                Console.WriteLine($"[SalesforceService] Calling: {describeUrl}");
+
+                var response = await client.GetAsync(describeUrl);
+                var content = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"[SalesforceService] Response status: {response.StatusCode}");
+                Console.WriteLine($"[SalesforceService] Response content: {content.Substring(0, Math.Min(500, content.Length))}...");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var describeResult = JsonSerializer.Deserialize<SalesforceObjectDescribe>(content);
+
+                    // Find the specific field
+                    var field = describeResult?.fields?.FirstOrDefault(f =>
+                        string.Equals(f.name, fieldName, StringComparison.OrdinalIgnoreCase));
+
+                    if (field?.picklistValues != null && field.picklistValues.Any())
+                    {
+                        var picklistValues = field.picklistValues
+                            .Where(pv => pv.active)
+                            .Select(pv => pv.value)
+                            .ToList();
+
+                        Console.WriteLine($"[SalesforceService] Found {picklistValues.Count} active picklist values for {fieldName}");
+                        return picklistValues;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[SalesforceService] No picklist values found for field {fieldName}");
+                        return new List<string>();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[SalesforceService] Failed to get picklist values: {response.StatusCode} - {content}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SalesforceService] Error getting picklist values: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Creates a stock take record in Salesforce
+        /// </summary>
+        public async Task<string> CreateStockTakeRecord(StockTakeRecord stockTakeRecord)
+        {
+            try
+            {
+                Console.WriteLine($"[SalesforceService] Creating stock take record in Salesforce");
+
+                await EnsureAuthenticated();
+
+                string gpsCoordinates = string.IsNullOrWhiteSpace(stockTakeRecord.GPS_CORD__c)
+                    ? "Unknown GPS"
+                    : stockTakeRecord.GPS_CORD__c;
+
+                // Map local record to Salesforce object
+                var salesforceRecord = new
+                {
+                    DISC_REG__c = stockTakeRecord.DISC_REG__c,
+                    //Vehicle_Registration__c = stockTakeRecord.Vehicle_Registration__c,
+                    //License_Number__c = stockTakeRecord.License_Number__c,
+                    REFID__c = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ssZ"),
+                    //Make__c = stockTakeRecord.Make__c,
+                    //Model__c = stockTakeRecord.Model__c,
+                    //Colour__c = stockTakeRecord.Colour__c,
+                    //Vehicle_Type__c = stockTakeRecord.Vehicle_Type__c,
+                    //VIN__c = stockTakeRecord.VIN__c,
+                    //Engine_Number__c = stockTakeRecord.Engine_Number__c,
+                    //License_Expiry_Date__c = stockTakeRecord.License_Expiry_Date__c,
+                    Yards__c = stockTakeRecord.Yards__c,
+                    Yard_Location__c = stockTakeRecord.Yard_Location__c,
+                    GPS_CORD__c = gpsCoordinates,
+                    //Geo_Latitude__c = stockTakeRecord.Geo_Latitude__c,
+                    //Geo_Longitude__c = stockTakeRecord.Geo_Longitude__c,
+                    Comments__c = stockTakeRecord.Comments__c
+                    //Stock_Take_Date__c = stockTakeRecord.Stock_Take_Date.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    //Stock_Take_By__c = stockTakeRecord.Stock_Take_By,
+                    //Has_Photo__c = stockTakeRecord.Has_Photo,
+                    //Photo_Count__c = stockTakeRecord.Photo_Count
+                };
+
+                Console.WriteLine($"[SalesforceService] Creating Yard_Stock_Take__c record");
+
+                // Use your existing CreateRecordAsync method
+                var recordId = await CreateRecordAsync("Yard_Stock_Take__c", salesforceRecord);
+
+                Console.WriteLine($"[SalesforceService] Successfully created stock take record with ID: {recordId}");
+                return recordId;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SalesforceService] Error creating stock take record: {ex.Message}");
+                return null;
+            }
+        }
     }
 
     #region Response Models
@@ -419,6 +545,25 @@ namespace RenewitSalesforceApp.Services
         public string statusCode { get; set; }
         public string message { get; set; }
         public string fields { get; set; }
+    }
+
+    public class SalesforceObjectDescribe
+    {
+        public List<SalesforceField> fields { get; set; }
+    }
+
+    public class SalesforceField
+    {
+        public string name { get; set; }
+        public string type { get; set; }
+        public List<PicklistValue> picklistValues { get; set; }
+    }
+
+    public class PicklistValue
+    {
+        public bool active { get; set; }
+        public string value { get; set; }
+        public string label { get; set; }
     }
 
     #endregion

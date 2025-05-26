@@ -15,15 +15,24 @@ namespace RenewitSalesforceApp.Models
         public string Name { get; set; }
 
         // Main identification fields
-        public string DISC_REG__c { get; set; }           // Disc Registration (External ID)
+        public string DISC_REG__c { get; set; }           // Full license disk barcode data
+        public string Vehicle_Registration__c { get; set; } // Extracted vehicle registration number
         public string License_Number__c { get; set; }     // License/Registration Number
         public string REFID__c { get; set; }              // Reference ID
         public string Ref_No__c { get; set; }             // Reference Number
 
-        // Location fields
-        public string Yard_Name__c { get; set; }          // Which Renew-it location
-        public string Yard_Location__c { get; set; }      // Where in the yard
-        public string Yards__c { get; set; }              // Additional yard field
+        // Vehicle details extracted from barcode scan
+        public string Make__c { get; set; }               // Vehicle make (e.g., VOLKSWAGEN)
+        public string Model__c { get; set; }              // Vehicle model (e.g., VW 216 T-CROSS)
+        public string Colour__c { get; set; }             // Vehicle colour (e.g., Black / Swart)
+        public string Vehicle_Type__c { get; set; }       // Vehicle type (e.g., Hatch back / Luikrug)
+        public string VIN__c { get; set; }                // VIN number (e.g., WVGZZZC1ZLY056933)
+        public string Engine_Number__c { get; set; }      // Engine number (e.g., DKJ048733)
+        public string License_Expiry_Date__c { get; set; } // License disk expiry date (e.g., 2025-05-31)
+
+        // Location fields - matching Salesforce object structure
+        public string Yards__c { get; set; }              // Yard Names picklist from Salesforce
+        public string Yard_Location__c { get; set; }      // Yard Location picklist from Salesforce
 
         // GPS and Location data
         public string GPS_CORD__c { get; set; }           // GPS coordinates as text
@@ -52,12 +61,15 @@ namespace RenewitSalesforceApp.Models
         public string SyncErrorMessage { get; set; }
 
         // Helper properties
-        public string DisplayName => !string.IsNullOrEmpty(DISC_REG__c) ?
-            $"Disc: {DISC_REG__c}" :
-            (!string.IsNullOrEmpty(License_Number__c) ? $"Lic: {License_Number__c}" : $"Ref: {REFID__c}");
+        public string DisplayName => !string.IsNullOrEmpty(Vehicle_Registration__c) ?
+            $"Registration: {Vehicle_Registration__c}" :
+            (!string.IsNullOrEmpty(License_Number__c) ? $"License: {License_Number__c}" : $"Ref: {REFID__c}");
+
+        public string VehicleInfo => !string.IsNullOrEmpty(Make__c) && !string.IsNullOrEmpty(Model__c) ?
+            $"{Make__c} {Model__c}" : "Vehicle details not scanned";
     }
 
-    // Enums for picklist values
+    // Fallback offline values - these will be used if Salesforce is unavailable
     public static class YardNames
     {
         public const string Bedfordview = "Renew-it Bedfordview";

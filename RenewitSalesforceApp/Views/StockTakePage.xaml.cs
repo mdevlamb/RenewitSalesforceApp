@@ -7,6 +7,10 @@ using Microsoft.Maui.Controls;
 using Microsoft.Maui.Networking;
 using RenewitSalesforceApp.Models;
 using RenewitSalesforceApp.Services;
+using System.Globalization;
+using ZXing.Net.Maui;
+using ZXing.Net.Maui.Controls;
+using System.Linq;
 
 namespace RenewitSalesforceApp.Views
 {
@@ -19,6 +23,11 @@ namespace RenewitSalesforceApp.Views
         private List<string> _photoPaths = new List<string>();
         private Location _currentLocation;
         private bool _isOfflineMode;
+
+        // Required field properties
+        public bool DiscRegRequired { get; set; } = true;
+        public bool YardRequired { get; set; } = true;
+        public bool YardLocationRequired { get; set; } = true;
 
         public bool IsOfflineMode
         {
@@ -49,29 +58,20 @@ namespace RenewitSalesforceApp.Views
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             _salesforceService = salesforceService ?? throw new ArgumentNullException(nameof(salesforceService));
 
-            // Set binding context for connectivity
+            // Set binding context for connectivity and required fields
             BindingContext = this;
 
             InitializePage();
         }
 
-        private void InitializePage()
+        private async void InitializePage()
         {
             try
             {
                 Console.WriteLine("[StockTakePage] Initializing page");
 
-                // Populate Branch picker
-                foreach (var branchName in YardNames.All)
-                {
-                    BranchPicker.Items.Add(branchName);
-                }
-
-                // Populate Department picker
-                foreach (var department in YardLocations.All)
-                {
-                    DepartmentPicker.Items.Add(department);
-                }
+                // Load picklist values from Salesforce or fallback to offline
+                await LoadPicklistValues();
 
                 // Check initial network status
                 IsOfflineMode = Connectivity.NetworkAccess != NetworkAccess.Internet;
@@ -79,14 +79,91 @@ namespace RenewitSalesforceApp.Views
                 // Subscribe to connectivity changes
                 Connectivity.ConnectivityChanged += Connectivity_ConnectivityChanged;
 
-                // Get current location on load
-                _ = Task.Run(async () => await GetCurrentLocationAsync());
+                // Request location immediately when page opens
+                Console.WriteLine("[StockTakePage] Requesting location services immediately");
+                await GetCurrentLocationAsync();
 
                 Console.WriteLine("[StockTakePage] Page initialized successfully");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[StockTakePage] Error initializing page: {ex.Message}");
+            }
+        }
+
+        private async Task LoadPicklistValues()
+        {
+            try
+            {
+                // Try to load from Salesforce first
+                if (Connectivity.NetworkAccess == NetworkAccess.Internet)
+                {
+                    Console.WriteLine("[StockTakePage] Loading picklist values from Salesforce");
+
+                    var yardPicklistValues = await _salesforceService.GetPicklistValues("Yard_Stock_Take__c", "Yards__c");
+                    var yardLocationPicklistValues = await _salesforceService.GetPicklistValues("Yard_Stock_Take__c", "Yard_Location__c");
+
+                    if (yardPicklistValues?.Count > 0)
+                    {
+                        YardPicker.Items.Clear();
+                        foreach (var value in yardPicklistValues)
+                        {
+                            YardPicker.Items.Add(value);
+                        }
+                        Console.WriteLine($"[StockTakePage] Loaded {yardPicklistValues.Count} yard values from Salesforce");
+                    }
+                    else
+                    {
+                        LoadOfflineYardValues();
+                    }
+
+                    if (yardLocationPicklistValues?.Count > 0)
+                    {
+                        YardLocationPicker.Items.Clear();
+                        foreach (var value in yardLocationPicklistValues)
+                        {
+                            YardLocationPicker.Items.Add(value);
+                        }
+                        Console.WriteLine($"[StockTakePage] Loaded {yardLocationPicklistValues.Count} yard location values from Salesforce");
+                    }
+                    else
+                    {
+                        LoadOfflineYardLocationValues();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[StockTakePage] No internet connection, loading offline picklist values");
+                    LoadOfflineYardValues();
+                    LoadOfflineYardLocationValues();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error loading picklist values from Salesforce: {ex.Message}");
+                // Fallback to offline values
+                LoadOfflineYardValues();
+                LoadOfflineYardLocationValues();
+            }
+        }
+
+        private void LoadOfflineYardValues()
+        {
+            Console.WriteLine("[StockTakePage] Loading offline yard values");
+            YardPicker.Items.Clear();
+            foreach (var yardName in YardNames.All)
+            {
+                YardPicker.Items.Add(yardName);
+            }
+        }
+
+        private void LoadOfflineYardLocationValues()
+        {
+            Console.WriteLine("[StockTakePage] Loading offline yard location values");
+            YardLocationPicker.Items.Clear();
+            foreach (var location in YardLocations.All)
+            {
+                YardLocationPicker.Items.Add(location);
             }
         }
 
@@ -113,145 +190,332 @@ namespace RenewitSalesforceApp.Views
             }
         }
 
+        // FIXED: Single barcode scanning method using TaskCompletionSource pattern
         private async void OnLicenseDiskScanClicked(object sender, TappedEventArgs e)
         {
             try
             {
                 Console.WriteLine("[StockTakePage] License disk scan button clicked");
 
-                // TODO: Implement license disk OCR scanning
-                await DisplayAlert(
-                    "License Disk Scanner",
-                    "License disk OCR scanning will be implemented here.\n\nThis will:\n• Scan vehicle license disks using camera\n• Extract registration number using OCR\n• Auto-populate relevant fields\n• Extract expiry date information",
-                    "OK");
+                // Check camera permission
+                var status = await Permissions.CheckStatusAsync<Permissions.Camera>();
+                if (status != PermissionStatus.Granted)
+                {
+                    status = await Permissions.RequestAsync<Permissions.Camera>();
+                    if (status != PermissionStatus.Granted)
+                    {
+                        await DisplayAlert("Permission Denied", "Camera permission is required to scan barcodes.", "OK");
+                        return;
+                    }
+                }
 
-                // Simulate OCR result for now
-                string result = await DisplayPromptAsync(
-                    "Simulated License Disk Scan",
-                    "Enter scanned data (simulating OCR):",
-                    placeholder: "%MVL1CC44%0134%4024T0P9%1%4024047PMTCD%DM77PKGP%GDM915K%...");
+                var barcodeReader = new CameraBarcodeReaderView
+                {
+                    Options = new BarcodeReaderOptions
+                    {
+                        Formats = BarcodeFormats.All,
+                        AutoRotate = true,
+                        Multiple = false
+                    }
+                };
+
+                var tcs = new TaskCompletionSource<string>();
+                bool hasScanned = false; // Prevent multiple scans
+
+                // Event handler for barcode detection
+                barcodeReader.BarcodesDetected += async (s, args) =>
+                {
+                    if (hasScanned) return; // Prevent multiple triggers
+
+                    if (args.Results?.Any() == true)
+                    {
+                        var barcode = args.Results.FirstOrDefault();
+                        if (barcode != null && !string.IsNullOrEmpty(barcode.Value))
+                        {
+                            hasScanned = true;
+
+                            // SUCCESS FEEDBACK: Vibration + Sound
+                            try
+                            {
+                                // Vibrate for 200ms
+                                Vibration.Vibrate(TimeSpan.FromMilliseconds(200));
+
+                                // Play system sound (if available)
+                                await PlayScanSuccessSound();
+                            }
+                            catch (Exception feedbackEx)
+                            {
+                                Console.WriteLine($"[StockTakePage] Feedback error: {feedbackEx.Message}");
+                            }
+
+                            MainThread.BeginInvokeOnMainThread(() =>
+                            {
+                                tcs.TrySetResult(barcode.Value);
+                            });
+                        }
+                    }
+                };
+
+                var cancelButton = new Button
+                {
+                    Text = "Cancel",
+                    HorizontalOptions = LayoutOptions.Center,
+                    Margin = new Thickness(0, 15, 0, 0),
+                    BackgroundColor = Color.FromArgb("#6c757d"),
+                    TextColor = Colors.White,
+                    CornerRadius = 8,
+                    Padding = new Thickness(30, 10)
+                };
+
+                cancelButton.Clicked += (s, e) =>
+                {
+                    hasScanned = true; // Prevent scan after cancel
+                    tcs.TrySetResult(null);
+                };
+
+                // BIGGER SCANNING WINDOW with instructions
+                var stackLayout = new VerticalStackLayout
+                {
+                    Padding = new Thickness(15),
+                    Spacing = 15,
+                    Children =
+            {
+                new Label
+                {
+                    Text = "Scan License Disk Barcode",
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 18,
+                    HorizontalOptions = LayoutOptions.Center,
+                    TextColor = Application.Current.RequestedTheme == AppTheme.Dark ? Colors.White : Colors.Black
+                },
+                new Label
+                {
+                    Text = "Position the barcode within the frame",
+                    FontSize = 14,
+                    HorizontalOptions = LayoutOptions.Center,
+                    TextColor = Application.Current.RequestedTheme == AppTheme.Dark ? Color.FromArgb("#aaaaaa") : Color.FromArgb("#666666"),
+                    Margin = new Thickness(0, 0, 0, 10)
+                },
+                new Frame
+                {
+                    Content = barcodeReader,
+                    Padding = new Thickness(0),
+                    CornerRadius = 15,
+                    IsClippedToBounds = true,
+                    HeightRequest = 400, // BIGGER: Increased from 300 to 400
+                    WidthRequest = 350,  // Set width for better aspect ratio
+                    HorizontalOptions = LayoutOptions.Center,
+                    BorderColor = Color.FromArgb("#007AFF"),
+                    HasShadow = true
+                },
+                cancelButton
+            }
+                };
+
+                var scanPage = new ContentPage
+                {
+                    Title = "Scan License Disk",
+                    Content = new ScrollView
+                    {
+                        Content = stackLayout,
+                        VerticalOptions = LayoutOptions.Center
+                    },
+                    // NORMAL BACKGROUND: Removed Colors.Black, using system default
+                    BackgroundColor = Application.Current.RequestedTheme == AppTheme.Dark
+                        ? Color.FromArgb("#1e1e1e")
+                        : Color.FromArgb("#f8f9fa")
+                };
+
+                await Navigation.PushModalAsync(scanPage);
+
+                // Wait for scan result
+                var result = await tcs.Task;
+
+                // AUTOMATIC CLOSE: Goes back immediately after scan
+                await Navigation.PopModalAsync();
 
                 if (!string.IsNullOrEmpty(result))
                 {
-                    // Extract the clean registration number from license disk data
-                    string cleanReg = ExtractRegistrationNumber(result);
-                    DiscRegEntry.Text = cleanReg;
-                    LicenseEntry.Text = cleanReg;
+                    Console.WriteLine($"[StockTakePage] Barcode scanned: {result}");
+
+                    // Show brief success message before parsing
+                    MainThread.BeginInvokeOnMainThread(async () =>
+                    {
+                        // Optional: Show a brief toast-like message
+                        await DisplayAlert("Scan Complete", "License disk scanned successfully!", "OK");
+                        ParseLicenseDiskBarcode(result);
+                    });
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[StockTakePage] Error in license disk scan: {ex.Message}");
-                await DisplayAlert("Error", "Failed to scan license disk", "OK");
+                await DisplayAlert("Error", "Failed to scan barcode", "OK");
             }
         }
+
+        // Helper method for scan success sound
+        private async Task PlayScanSuccessSound()
+        {
+            try
+            {
+                // Option 1: Try to play system notification sound
+#if ANDROID
+        await PlayAndroidNotificationSound();
+#elif IOS
+                await PlayiOSSystemSound();
+#endif
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Could not play sound: {ex.Message}");
+                // Sound is optional, don't throw
+            }
+        }
+
+#if ANDROID
+private async Task PlayAndroidNotificationSound()
+{
+    try
+    {
+        // Use Android's notification sound
+        var context = Platform.CurrentActivity ?? Android.App.Application.Context;
+        var notification = Android.Media.RingtoneManager.GetDefaultUri(Android.Media.RingtoneType.Notification);
+        var ringtone = Android.Media.RingtoneManager.GetRingtone(context, notification);
+        ringtone?.Play();
+        
+        await Task.Delay(100); // Brief delay
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Android sound error: {ex.Message}");
+    }
+}
+#endif
+
+#if IOS
+        private async Task PlayiOSSystemSound()
+        {
+            try
+            {
+                // Use iOS system sound
+                AudioToolbox.SystemSound.FromFile("/System/Library/Audio/UISounds/payment_success.caf")?.PlaySystemSound();
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"iOS sound error: {ex.Message}");
+            }
+        }
+#endif
 
         /// <summary>
-        /// Extracts clean registration number from license disk barcode data
-        /// Equivalent to Salesforce formula: UPPER(IF(LEFT(MID(DISC_REG__c,40,1000),FIND("%",MID(DISC_REG__c,40,1000),1)-1) = "", DISC_REG__c, LEFT(MID(DISC_REG__c,40,1000),FIND("%",MID(DISC_REG__c,40,1000),1)-1)))
+        /// Parses license disk barcode data and populates form fields
+        /// Example format: %MVL1CC57%0156%4024O03C%1%40240486F3MD%KN87PFGP%HTS977K%Hatch back / Luikrug%VOLKSWAGEN%VW 216 T-CROSS%Black / Swart%WVGZZZC1ZLY056933%DKJ048733%2025-05-31%
         /// </summary>
-        private static string ExtractRegistrationNumber(string discReg)
-        {
-            if (string.IsNullOrEmpty(discReg) || discReg.Length < 40)
-                return discReg?.ToUpper() ?? "";
-
-            try
-            {
-                // Get substring starting from position 40 (0-based index = 39)
-                string substring = discReg.Substring(39);
-
-                // Find first % character
-                int percentIndex = substring.IndexOf('%');
-
-                if (percentIndex > 0)
-                {
-                    // Extract text before the first %
-                    string extracted = substring.Substring(0, percentIndex);
-                    return string.IsNullOrEmpty(extracted) ? discReg.ToUpper() : extracted.ToUpper();
-                }
-
-                return discReg.ToUpper();
-            }
-            catch
-            {
-                return discReg?.ToUpper() ?? "";
-            }
-        }
-
-        private async void OnQRScanClicked(object sender, TappedEventArgs e)
+        private void ParseLicenseDiskBarcode(string barcodeData)
         {
             try
             {
-                Console.WriteLine("[StockTakePage] QR scan button clicked");
+                Console.WriteLine($"[StockTakePage] Parsing barcode data: {barcodeData}");
 
-                // TODO: Implement QR code scanning
-                await DisplayAlert(
-                    "QR Code Scanner",
-                    "QR code scanning will be implemented here.\n\nThis will:\n• Scan QR codes using camera\n• Parse structured data\n• Auto-populate multiple fields\n• Support various QR formats",
-                    "OK");
+                // Save the full barcode data to DISC_REG field
+                DiscRegEntry.Text = barcodeData;
 
-                // Simulate QR scan result
-                string qrData = await DisplayPromptAsync(
-                    "Simulated QR Scan",
-                    "Enter QR data (simulating scan):",
-                    placeholder: "REF:ABC123|LOC:Topyard|DISC:ABC123GP");
+                // Split by % to get individual components
+                var parts = barcodeData.Split('%');
 
-                if (!string.IsNullOrEmpty(qrData))
+                Console.WriteLine($"[StockTakePage] Barcode split into {parts.Length} parts");
+
+                if (parts.Length >= 15) // Need at least 15 parts (0-14)
                 {
-                    ParseQRData(qrData);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[StockTakePage] Error in QR scan: {ex.Message}");
-                await DisplayAlert("Error", "Failed to scan QR code", "OK");
-            }
-        }
+                    // CORRECTED indices based on actual barcode structure
+                    var licenseNumber = parts.Length > 5 ? parts[5] : "";     // Index 5: License number
+                    var vehicleReg = parts.Length > 6 ? parts[6] : "";        // Index 6: Vehicle registration  
+                    var vehicleType = parts.Length > 8 ? parts[8] : "";       // Index 8: Vehicle type
+                    var make = parts.Length > 9 ? parts[9] : "";              // Index 9: Make
+                    var model = parts.Length > 10 ? parts[10] : "";           // Index 10: Model
+                    var colour = parts.Length > 11 ? parts[11] : "";          // Index 11: Colour
+                    var vin = parts.Length > 12 ? parts[12] : "";             // Index 12: VIN
+                    var engineNumber = parts.Length > 13 ? parts[13] : "";    // Index 13: Engine number
+                    var expiryDate = parts.Length > 14 ? parts[14] : "";      // Index 14: Expiry date
 
-        private void ParseQRData(string qrData)
-        {
-            try
-            {
-                // Simple QR data parser - can be enhanced based on actual QR format
-                var parts = qrData.Split('|');
-                foreach (var part in parts)
-                {
-                    var keyValue = part.Split(':');
-                    if (keyValue.Length == 2)
+                    // Debug logging
+                    Console.WriteLine($"[StockTakePage] Extracted values:");
+                    Console.WriteLine($"  License Number: {licenseNumber}");
+                    Console.WriteLine($"  Vehicle Reg: {vehicleReg}");
+                    Console.WriteLine($"  Vehicle Type: {vehicleType}");
+                    Console.WriteLine($"  Make: {make}");
+                    Console.WriteLine($"  Model: {model}");
+                    Console.WriteLine($"  Colour: {colour}");
+                    Console.WriteLine($"  VIN: {vin}");
+                    Console.WriteLine($"  Engine Number: {engineNumber}");
+                    Console.WriteLine($"  Expiry Date: {expiryDate}");
+
+                    // Populate form fields
+                    if (!string.IsNullOrEmpty(vehicleReg))
+                        VehicleRegEntry.Text = vehicleReg;
+
+                    if (!string.IsNullOrEmpty(licenseNumber))
+                        LicenseEntry.Text = licenseNumber;
+
+                    if (!string.IsNullOrEmpty(make))
+                        MakeEntry.Text = make;
+
+                    if (!string.IsNullOrEmpty(model))
+                        ModelEntry.Text = model;
+
+                    if (!string.IsNullOrEmpty(colour))
+                        ColourEntry.Text = colour;
+
+                    if (!string.IsNullOrEmpty(vehicleType))
+                        VehicleTypeEntry.Text = vehicleType;
+
+                    if (!string.IsNullOrEmpty(vin))
+                        VinEntry.Text = vin;
+
+                    if (!string.IsNullOrEmpty(engineNumber))
+                        EngineEntry.Text = engineNumber;
+
+                    if (!string.IsNullOrEmpty(expiryDate))
+                        ExpiryDateEntry.Text = expiryDate;
+
+                    Console.WriteLine($"[StockTakePage] Successfully parsed barcode - Registration: {vehicleReg}, Make: {make}, Model: {model}");
+
+                    MainThread.BeginInvokeOnMainThread(async () =>
                     {
-                        string key = keyValue[0].ToUpper();
-                        string value = keyValue[1];
-
-                        switch (key)
-                        {
-                            case "REF":
-                                RefIdEntry.Text = value;
-                                break;
-                            case "DISC":
-                                DiscRegEntry.Text = value;
-                                break;
-                            case "LIC":
-                                LicenseEntry.Text = value;
-                                break;
-                            case "LOC":
-                                // Try to match location
-                                for (int i = 0; i < DepartmentPicker.Items.Count; i++)
-                                {
-                                    if (DepartmentPicker.Items[i].Contains(value))
-                                    {
-                                        DepartmentPicker.SelectedIndex = i;
-                                        break;
-                                    }
-                                }
-                                break;
-                        }
-                    }
+                        await DisplayAlert("Scan Complete",
+                            $"Successfully scanned license disk!\n\nRegistration: {vehicleReg}\nMake: {make}\nModel: {model}",
+                            "OK");
+                    });
                 }
-                Console.WriteLine($"[StockTakePage] Parsed QR data: {qrData}");
+                else
+                {
+                    Console.WriteLine($"[StockTakePage] Barcode format not recognized - {parts.Length} parts found, expected at least 15");
+
+                    // Log all parts for debugging
+                    for (int i = 0; i < parts.Length; i++)
+                    {
+                        Console.WriteLine($"[StockTakePage] Part {i}: '{parts[i]}'");
+                    }
+
+                    MainThread.BeginInvokeOnMainThread(async () =>
+                    {
+                        await DisplayAlert("Scan Warning",
+                            $"Barcode scanned but format not recognized ({parts.Length} parts found, expected 15+). Full data saved to DISC_REG field.",
+                            "OK");
+                    });
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StockTakePage] Error parsing QR data: {ex.Message}");
+                Console.WriteLine($"[StockTakePage] Error parsing barcode: {ex.Message}");
+                MainThread.BeginInvokeOnMainThread(async () =>
+                {
+                    await DisplayAlert("Parse Error",
+                        "Error parsing barcode data. Full data saved to DISC_REG field.",
+                        "OK");
+                });
             }
         }
 
@@ -260,6 +524,7 @@ namespace RenewitSalesforceApp.Views
             await GetCurrentLocationAsync();
         }
 
+        // FIXED: Use correct Geolocation.GetLocationAsync method
         private async Task GetCurrentLocationAsync()
         {
             try
@@ -278,12 +543,12 @@ namespace RenewitSalesforceApp.Views
                 {
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
-                        GpsLabel.Text = "Location permission denied";
+                        GpsLabel.Text = "Location permission denied - tap to retry";
                     });
                     return;
                 }
 
-                // Get current location
+                // Get current location - FIXED: Use GetLocationAsync instead of GetCurrentLocationAsync
                 var request = new GeolocationRequest
                 {
                     DesiredAccuracy = GeolocationAccuracy.Medium,
@@ -307,7 +572,7 @@ namespace RenewitSalesforceApp.Views
                 {
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
-                        GpsLabel.Text = "Unable to get location";
+                        GpsLabel.Text = "Unable to get location - tap to retry";
                     });
                 }
             }
@@ -329,7 +594,6 @@ namespace RenewitSalesforceApp.Views
                 {
                     Console.WriteLine("[StockTakePage] Opening map preview");
 
-                    // TODO: Implement map preview - could use Microsoft.Maui.Maps or open external maps
                     var options = new MapLaunchOptions
                     {
                         Name = "Stock Take Location"
@@ -382,59 +646,94 @@ namespace RenewitSalesforceApp.Views
 
                 if (!ValidateData())
                 {
-                    await DisplayAlert("Incomplete Data", "Please fill in all required fields:\n• At least one identifier\n• Branch\n• Department", "OK");
+                    await DisplayAlert("Incomplete Data", "Please fill in all required fields:\n• Vehicle Registration\n• Yard\n• Yard Location", "OK");
                     return;
                 }
 
-                var stockTakeRecord = CreateStockTakeRecord();
-                await _databaseService.SaveStockTakeRecordAsync(stockTakeRecord);
+                // Get current location - FIXED: Use GetLocationAsync
+                Location currentLocation = null;
+                try
+                {
+                    currentLocation = await Geolocation.GetLocationAsync(new GeolocationRequest
+                    {
+                        DesiredAccuracy = GeolocationAccuracy.Medium,
+                        Timeout = TimeSpan.FromSeconds(10)
+                    });
+                }
+                catch (Exception locEx)
+                {
+                    Console.WriteLine($"[StockTakePage] Could not get location: {locEx.Message}");
+                }
 
-                await DisplayAlert("Stock Take Submitted", "Stock take saved successfully and will be synced to Salesforce.", "OK");
+                // Get StockTakeService from DI
+                var stockTakeService = Handler?.MauiContext?.Services?.GetService<StockTakeService>();
+                if (stockTakeService == null)
+                {
+                    await DisplayAlert("Error", "StockTakeService not available", "OK");
+                    return;
+                }
+
+                // Create stock take record
+                var stockTake = await stockTakeService.CreateStockTakeAsync(
+                    vehicleRegistration: VehicleRegEntry.Text,
+                    discRegData: DiscRegEntry.Text,
+                    yards: YardPicker.SelectedIndex >= 0 ? YardPicker.Items[YardPicker.SelectedIndex] : null,
+                    yardLocation: YardLocationPicker.SelectedIndex >= 0 ? YardLocationPicker.Items[YardLocationPicker.SelectedIndex] : null,
+                    photoPaths: _photoPaths,
+                    comments: CommentsEditor.Text,
+                    latitude: currentLocation?.Latitude,
+                    longitude: currentLocation?.Longitude
+                );
+
+                Console.WriteLine($"[StockTakePage] Stock take created with LocalId: {stockTake.LocalId}");
+
+                // Try to sync immediately if online
+                if (Connectivity.NetworkAccess == NetworkAccess.Internet)
+                {
+                    try
+                    {
+                        Console.WriteLine("[StockTakePage] Attempting immediate sync");
+                        var syncCount = await stockTakeService.SyncStockTakesAsync();
+
+                        if (syncCount > 0)
+                        {
+                            await DisplayAlert("Success", "Stock take saved and synced to Salesforce!", "OK");
+                        }
+                        else
+                        {
+                            await DisplayAlert("Saved Locally", "Stock take saved locally. Will sync when connection improves.", "OK");
+                        }
+                    }
+                    catch (Exception syncEx)
+                    {
+                        Console.WriteLine($"[StockTakePage] Sync error: {syncEx.Message}");
+                        await DisplayAlert("Saved Locally", "Stock take saved locally. Will sync when connection improves.", "OK");
+                    }
+                }
+                else
+                {
+                    await DisplayAlert("Saved Locally", "Stock take saved locally. Will sync when online.", "OK");
+                }
+
                 await Navigation.PopAsync();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StockTakePage] Error submitting stock take: {ex.Message}");
-                await DisplayAlert("Submit Error", "Could not submit stock take", "OK");
+                Console.WriteLine($"[StockTakePage] Error submitting: {ex.Message}");
+                await DisplayAlert("Error", $"Could not save stock take: {ex.Message}", "OK");
             }
         }
 
         private bool ValidateData()
         {
-            // Check if at least one identifier is filled
-            bool hasIdentifier = !string.IsNullOrEmpty(DiscRegEntry.Text) ||
-                                !string.IsNullOrEmpty(LicenseEntry.Text) ||
-                                !string.IsNullOrEmpty(RefIdEntry.Text);
+            // Check if vehicle registration is filled (required field)
+            bool hasVehicleReg = !string.IsNullOrEmpty(VehicleRegEntry.Text);
 
-            // Check if branch and department are selected
-            bool hasLocation = BranchPicker.SelectedIndex >= 0 &&
-                              DepartmentPicker.SelectedIndex >= 0;
+            // Check if yard and yard location are selected
+            bool hasLocation = YardPicker.SelectedIndex >= 0 &&
+                              YardLocationPicker.SelectedIndex >= 0;
 
-            return hasIdentifier && hasLocation;
-        }
-
-        private StockTakeRecord CreateStockTakeRecord()
-        {
-            return new StockTakeRecord
-            {
-                DISC_REG__c = DiscRegEntry.Text,
-                License_Number__c = LicenseEntry.Text,
-                REFID__c = RefIdEntry.Text,
-                Yard_Name__c = BranchPicker.SelectedIndex >= 0 ? BranchPicker.Items[BranchPicker.SelectedIndex] : null,
-                Yard_Location__c = DepartmentPicker.SelectedIndex >= 0 ? DepartmentPicker.Items[DepartmentPicker.SelectedIndex] : null,
-                Comments__c = CommentsEditor.Text,
-                Stock_Take_Date = DateTime.Now,
-                Stock_Take_By = _authService.CurrentUser?.Name,
-                Has_Photo = _photoPaths.Count > 0,
-                Photo_Count = _photoPaths.Count,
-                PhotoPath = _photoPaths.Count > 0 ? _photoPaths[0] : null,
-                AllPhotoPaths = string.Join(";", _photoPaths),
-                GPS_CORD__c = _currentLocation != null ? $"{_currentLocation.Latitude},{_currentLocation.Longitude}" : null,
-                Geo_Latitude__c = _currentLocation?.Latitude,
-                Geo_Longitude__c = _currentLocation?.Longitude,
-                IsSynced = false,
-                SyncAttempts = 0
-            };
+            return hasVehicleReg && hasLocation;
         }
     }
 }

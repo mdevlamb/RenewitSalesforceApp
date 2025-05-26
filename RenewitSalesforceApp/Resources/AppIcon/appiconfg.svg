@@ -1,16 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg">
-
-	<!-- Main Blue Shape -->
-	<path d="M 120 180 Q 200 150 300 180 Q 360 200 350 250 Q 340 300 290 320 Q 240 340 190 320 Q 140 300 130 250 Q 120 200 120 180 Z"
-          fill="#3E4A6B"/>
-
-	<!-- Red Accent -->
-	<path d="M 200 160 Q 260 140 320 170 Q 350 190 340 220 Q 330 250 300 260 Q 270 270 240 260 Q 210 250 205 220 Q 200 190 200 170 Z"
-          fill="#B91C3C"/>
-
-	<!-- Small Grey Detail -->
-	<path d="M 280 200 Q 310 190 330 210 Q 340 225 335 240 Q 330 255 315 260 Q 300 265 285 255 Q 270 245 275 230 Q 280 215 280 205 Z"
-          fill="#9CA3AF"/>
-
+	<!-- Slightly smaller circle for adaptive icon padding -->
+	<circle cx="228" cy="228" r="160" fill="white"/>
+	<!-- Blue Left Half -->
+	<path d="M 228 68 A 160 160 0 0 0 228 388 L 228 228 Z" fill="#3E4A6B"/>
+	<!-- Red Right Half -->
+	<path d="M 228 68 A 160 160 0 0 1 228 388 L 228 228 Z" fill="#B91C3C"/>
+	<!-- White Vertical Separator Line -->
+	<line x1="228" y1="68" x2="228" y2="388" stroke="white" stroke-width="10"/>
 </svg>
