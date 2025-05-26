@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:RenewitSalesforceApp.Converters"
+             x:Class="RenewitSalesforceApp.Views.HomePage"
+             Title="Login Page"
+             BackgroundColor="{AppThemeBinding Light=#f0f2f5, Dark=#121212}">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:ConnectivityColorConverter x:Key="ConnectivityColorConverter"/>
+            <converters:ConnectivityTextConverter x:Key="ConnectivityTextConverter"/>
+            <converters:ConnectivityIconConverter x:Key="ConnectivityIconConverter"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="10" RowSpacing="15">
+
+        <!-- Header with user info and connectivity -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,10,0,5">
+            <Frame Grid.Column="0" 
+                   HeightRequest="40" 
+                   WidthRequest="40" 
+                   CornerRadius="20"
+                   Padding="0"
+                   HasShadow="False"
+                   BackgroundColor="#4CAF50"
+                   HorizontalOptions="Start"
+                   VerticalOptions="Start">
+                <Label x:Name="AvatarLabel"
+                       Text="R"
+                       FontSize="20"
+                       FontAttributes="Bold"
+                       TextColor="White"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center"/>
+            </Frame>
+
+            <VerticalStackLayout Grid.Column="1" Spacing="2" Margin="15,0,0,0" VerticalOptions="Start">
+                <Label x:Name="GreetingLabel" 
+                       Text="Hello, User" 
+                       FontSize="18" 
+                       FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
+                <Label x:Name="DateLabel" 
+                       Text="Today" 
+                       FontSize="14" 
+                       TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
+            </VerticalStackLayout>
+
+            <Frame Grid.Column="2" 
+                   BackgroundColor="{Binding IsOfflineMode, Converter={StaticResource ConnectivityColorConverter}}" 
+                   CornerRadius="12" 
+                   Padding="8,4"
+                   HasShadow="False"
+                   VerticalOptions="Start"
+                   HorizontalOptions="End"
+                   Margin="0,0,10,0">
+                <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="4">
+                    <Label Grid.Column="0"
+                           Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityIconConverter}}"
+                           FontFamily="MaterialIcons"
+                           FontSize="16"
+                           TextColor="White"
+                           VerticalOptions="Center"/>
+                    <Label Grid.Column="1"
+                           Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityTextConverter}}" 
+                           TextColor="White" 
+                           FontSize="12"
+                           FontAttributes="Bold"
+                           VerticalOptions="Center"/>
+                </Grid>
+            </Frame>
+
+            <Button Grid.Column="3"
+                    Text="&#xe9ba;"
+                    FontFamily="MaterialIcons"
+                    FontSize="24"
+                    TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"
+                    BackgroundColor="Transparent"
+                    VerticalOptions="Start"
+                    HorizontalOptions="End"
+                    Clicked="OnLogoutClicked"
+                    WidthRequest="40"
+                    HeightRequest="40"
+                    Padding="0"/>
+        </Grid>
+
+        <!-- Pending Sync Items -->
+        <Frame Grid.Row="1" 
+               BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}" 
+               BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
+               CornerRadius="8" 
+               HasShadow="True"
+               Padding="15,12"
+               IsVisible="{Binding HasPendingTransactions}"
+               Margin="5,0,5,0">
+            <Grid ColumnDefinitions="Auto,*,Auto" RowSpacing="4">
+                <Label Grid.Column="0"
+                       Text="&#xe627;" 
+                       FontFamily="MaterialIcons"
+                       FontSize="20"
+                       TextColor="#FF9800"
+                       VerticalOptions="Center"/>
+                <VerticalStackLayout Grid.Column="1" Margin="10,0,0,0">
+                    <Label Text="Not synced to Salesforce" 
+                           FontAttributes="Bold" 
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"/>
+                    <Label x:Name="PendingCountLabel" 
+                           Text="0 transactions waiting" 
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light=#666666, Dark=#aaaaaa}"/>
+                </VerticalStackLayout>
+                <Button Grid.Column="2"
+                        Text="Sync"
+                        BackgroundColor="#007AFF" 
+                        TextColor="White"
+                        CornerRadius="15"
+                        HeightRequest="30"
+                        WidthRequest="70"
+                        FontSize="12"
+                        Padding="0"
+                        VerticalOptions="Center"
+                        Clicked="OnSyncNowClicked"/>
+            </Grid>
+        </Frame>
+
+        <!-- Main Content - Stock Take Button (Top Left) -->
+        <Grid Grid.Row="2" 
+              HorizontalOptions="Start"
+              VerticalOptions="Start"
+              Margin="5,10,20,20">
+
+            <!-- Stock Take Button -->
+            <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}" 
+                   BorderColor="{AppThemeBinding Light=#e0e0e0, Dark=#333333}"
+                   CornerRadius="12" 
+                   HasShadow="True"
+                   HeightRequest="160"
+                   WidthRequest="200"
+                   Padding="0">
+                <Grid RowDefinitions="*,Auto" Padding="20">
+                    <Frame Grid.Row="0"
+                           BackgroundColor="#fff8e1"
+                           BorderColor="Transparent"
+                           CornerRadius="40" 
+                           HeightRequest="80"
+                           WidthRequest="80"
+                           Padding="0"
+                           HorizontalOptions="Center"
+                           Margin="0,15,0,10">
+                        <Label Text="&#xe85d;" 
+                               FontFamily="MaterialIcons"
+                               FontSize="40" 
+                               HorizontalOptions="Center" 
+                               VerticalOptions="Center" 
+                               TextColor="#FF9800"/>
+                    </Frame>
+                    <Label Grid.Row="1"
+                           Text="Stock Take" 
+                           HorizontalOptions="Center" 
+                           FontAttributes="Bold"
+                           FontSize="20"
+                           TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                           Margin="0,5,0,10"/>
+                    <Button Grid.RowSpan="2" 
+                            BackgroundColor="Transparent" 
+                            Clicked="OnStockTakeClicked"/>
+                </Grid>
+            </Frame>
+        </Grid>
+
+        <BoxView Grid.Row="3" HeightRequest="1" Color="Transparent"/>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:RenewitSalesforceApp.Converters"
+             x:Class="RenewitSalesforceApp.Views.PinLoginPage"
+             BackgroundColor="{AppThemeBinding Light=#f8f9fa, Dark=#121212}">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:ConnectivityColorConverter x:Key="ConnectivityColorConverter"/>
+            <converters:ConnectivityTextConverter x:Key="ConnectivityTextConverter"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="*,Auto"
+          Padding="25,10,25,25">
+
+        <!-- Login card - centered vertically -->
+        <Frame Grid.Row="0"
+               BorderColor="{AppThemeBinding Light=#eeeeee, Dark=#2d2d2d}"
+               BackgroundColor="{AppThemeBinding Light=White, Dark=#1e1e1e}"
+               CornerRadius="28"
+               HasShadow="True"
+               WidthRequest="320"
+               HorizontalOptions="Center"
+               VerticalOptions="Center"
+               Margin="0,0,0,0"
+               Padding="30,35">
+            <VerticalStackLayout Spacing="25">
+                <!-- Title with icon -->
+                <StackLayout Orientation="Horizontal" 
+                             HorizontalOptions="Center" 
+                             Spacing="10">
+                    <Label Text="&#xe897;"
+                           FontFamily="MaterialIcons"
+                           FontSize="28"
+                           TextColor="{AppThemeBinding Light=#0078D7, Dark=#5AA8E1}"
+                           VerticalOptions="Center" />
+                    <Label Text="Enter Your PIN"
+                           FontSize="24"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}" />
+                </StackLayout>
+
+                <!-- PIN Entry with underline style -->
+                <Frame BackgroundColor="{AppThemeBinding Light=#f7f8fa, Dark=#2a2a2a}"
+                       BorderColor="{AppThemeBinding Light=#e2e8f0, Dark=#3a3a3a}"
+                       CornerRadius="16"
+                       HasShadow="False"
+                       Padding="15,5"
+                       Margin="0,10">
+                    <Entry x:Name="PinEntry"
+                           IsPassword="True"
+                           Keyboard="Numeric"
+                           MaxLength="6"
+                           Placeholder="• • • • • •"
+                           PlaceholderColor="{AppThemeBinding Light=#aaaaaa, Dark=#666666}"
+                           HorizontalTextAlignment="Center"
+                           TextColor="{AppThemeBinding Light=#333333, Dark=#f5f5f5}"
+                           BackgroundColor="Transparent"
+                           VerticalOptions="Center"
+                           FontSize="28"
+                           FontAttributes="Bold" />
+                </Frame>
+
+                <!-- Login Button -->
+                <Button x:Name="LoginButton"
+                        Text="LOGIN"
+                        BackgroundColor="{AppThemeBinding Light=#0078D7, Dark=#0065b8}"
+                        TextColor="White"
+                        FontAttributes="Bold"
+                        FontSize="16"
+                        CornerRadius="28"
+                        HeightRequest="56"
+                        Margin="0,15,0,5"
+                        Clicked="OnLoginButtonClicked" />
+
+                <!-- Loading Indicator -->
+                <ActivityIndicator x:Name="LoadingIndicator"
+                                   IsRunning="False"
+                                   IsVisible="False"
+                                   Color="{AppThemeBinding Light=#0078D7, Dark=#5AA8E1}"
+                                   HorizontalOptions="Center"
+                                   HeightRequest="40"
+                                   WidthRequest="40" />
+            </VerticalStackLayout>
+        </Frame>
+
+        <!-- Connectivity Status Bar at bottom -->
+        <Frame Grid.Row="1" 
+               BackgroundColor="{Binding IsOfflineMode, Converter={StaticResource ConnectivityColorConverter}}"
+               HasShadow="False"
+               CornerRadius="20"
+               HeightRequest="36"
+               Padding="15,0"
+               Opacity="0.9"
+               HorizontalOptions="Center"
+               VerticalOptions="Start"
+               Margin="0,10,0,0">
+            <HorizontalStackLayout HorizontalOptions="Center" 
+                                  Spacing="8" 
+                                  VerticalOptions="Center">
+                <!-- Connectivity Icon -->
+                <Label Text="{Binding IsOfflineMode, Converter={x:Static converters:ConnectivityIconConverter.Instance}}"
+                       FontFamily="MaterialIcons"
+                       FontSize="18"
+                       TextColor="White"
+                       VerticalOptions="Center" />
+
+                <!-- Status text -->
+                <Label Text="{Binding IsOfflineMode, Converter={StaticResource ConnectivityTextConverter}}"
+                       FontSize="14"
+                       FontAttributes="Bold"
+                       TextColor="White"
+                       VerticalOptions="Center" />
+            </HorizontalStackLayout>
+        </Frame>
+    </Grid>
+</ContentPage>
