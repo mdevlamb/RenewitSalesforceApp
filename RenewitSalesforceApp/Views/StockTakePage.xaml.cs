@@ -630,13 +630,17 @@ namespace RenewitSalesforceApp.Views
 
         private async void OnSubmitClicked(object sender, EventArgs e)
         {
+            // Prevent multiple submissions
+            if (!SubmitButton.IsEnabled)
+                return;
+
             try
             {
                 Console.WriteLine("[StockTakePage] Submit button clicked");
 
-                // Show the full-screen loading spinner and disable submit button
-                FullScreenLoadingOverlay.IsVisible = true;
+                // Disable button to prevent multiple submissions
                 SubmitButton.IsEnabled = false;
+                SubmitButton.Text = "Processing...";
 
                 // 1. Validate required data
                 if (!ValidateData())
@@ -644,172 +648,158 @@ namespace RenewitSalesforceApp.Views
                     await DisplayAlert("Incomplete Data",
                         "Please fill in all required fields:\n• Vehicle Registration\n• Branch\n• Department",
                         "OK");
-
-                    // Hide spinner and re-enable button
-                    FullScreenLoadingOverlay.IsVisible = false;
-                    SubmitButton.IsEnabled = true;
                     return;
                 }
 
-                // 2. Get current location for submission
-                Location currentLocation = null;
-                try
+                // 2. Get current location
+                Location currentLocation = _currentLocation;
+                if (currentLocation == null)
                 {
-                    currentLocation = await Geolocation.GetLocationAsync(new GeolocationRequest
+                    try
                     {
-                        DesiredAccuracy = GeolocationAccuracy.Medium,
-                        Timeout = TimeSpan.FromSeconds(5)
-                    });
+                        currentLocation = await Geolocation.GetLocationAsync(new GeolocationRequest
+                        {
+                            DesiredAccuracy = GeolocationAccuracy.Medium,
+                            Timeout = TimeSpan.FromSeconds(5)
+                        });
+                    }
+                    catch (Exception locEx)
+                    {
+                        Console.WriteLine($"[StockTakePage] Could not get location: {locEx.Message}");
+                    }
                 }
-                catch (Exception locEx)
-                {
-                    Console.WriteLine($"[StockTakePage] Could not get location: {locEx.Message}");
-                    // Continue even without location
-                }
 
-                // 3. Create stock take record object
-                var stockTake = new StockTakeRecord
-                {
-                    // Main identification fields
-                    Vehicle_Registration__c = VehicleRegEntry.Text?.Trim(),
-                    DISC_REG__c = DiscRegEntry.Text,
-                    License_Number__c = LicenseEntry.Text,
+                // 3. Create stock take record object (but don't save to local DB yet)
+                var stockTake = new StockTakeRecord();
 
-                    // Vehicle details from barcode scan
-                    Make__c = MakeEntry.Text,
-                    Model__c = ModelEntry.Text,
-                    Colour__c = ColourEntry.Text,
-                    Vehicle_Type__c = VehicleTypeEntry.Text,
-                    VIN__c = VinEntry.Text,
-                    Engine_Number__c = EngineEntry.Text,
-                    License_Expiry_Date__c = ExpiryDateEntry.Text,
+                // Populate all fields
+                stockTake.Vehicle_Registration__c = VehicleRegEntry.Text?.Trim();
+                stockTake.DISC_REG__c = DiscRegEntry.Text;
+                stockTake.License_Number__c = LicenseEntry.Text;
+                stockTake.Make__c = MakeEntry.Text;
+                stockTake.Model__c = ModelEntry.Text;
+                stockTake.Colour__c = ColourEntry.Text;
+                stockTake.Vehicle_Type__c = VehicleTypeEntry.Text;
+                stockTake.VIN__c = VinEntry.Text;
+                stockTake.Engine_Number__c = EngineEntry.Text;
+                stockTake.License_Expiry_Date__c = ExpiryDateEntry.Text;
+                stockTake.Yards__c = BranchPicker.SelectedIndex >= 0 ? BranchPicker.Items[BranchPicker.SelectedIndex] : null;
+                stockTake.Yard_Location__c = DepartmentPicker.SelectedIndex >= 0 ? DepartmentPicker.Items[DepartmentPicker.SelectedIndex] : null;
+                stockTake.Comments__c = CommentsEditor.Text;
 
-                    // Location fields
-                    Yards__c = BranchPicker.SelectedItem?.ToString(),
-                    Yard_Location__c = DepartmentPicker.SelectedItem?.ToString(),
-
-                    // Comments
-                    Comments__c = CommentsEditor.Text,
-
-                    // Stock take metadata
-                    LocalStockTakeDate = DateTime.Now,
-                    LocalStockTakeBy = _authService.CurrentUser?.Name ?? "Unknown User",
-
-                    // Photo information
-                    HasPhoto = _photoPaths.Count > 0,
-                    PhotoCount = _photoPaths.Count,
-                    PhotoPath = _photoPaths.FirstOrDefault(),
-                    AllPhotoPaths = _photoPaths.Count > 0 ? string.Join(";", _photoPaths) : null,
-                };
-
-                // Generate reference ID
+                // Set metadata
                 stockTake.GenerateRefId();
-
-                // Set stock take date (both local and SF format)
                 stockTake.SetStockTakeDate(DateTime.Now);
-
-                // Set stock take user (both local and SF format) 
                 stockTake.SetStockTakeBy(_authService.CurrentUser?.Name ?? "Unknown User");
 
-                // Set GPS coordinates
                 if (currentLocation != null)
                 {
                     stockTake.SetGPSCoordinates(currentLocation.Latitude, currentLocation.Longitude);
                 }
 
-                // 4. Check connectivity and determine sync strategy
-                bool isOnline = Connectivity.NetworkAccess == NetworkAccess.Internet;
-                bool directlySynced = false;
-                string salesforceId = null;
+                // Handle photos
+                if (_photoPaths.Count > 0)
+                {
+                    stockTake.HasPhoto = true;
+                    stockTake.PhotoCount = _photoPaths.Count;
+                    stockTake.PhotoPath = _photoPaths.FirstOrDefault();
+                    stockTake.AllPhotoPaths = string.Join(";", _photoPaths);
+                }
 
-                if (isOnline)
+                // 4. Try Salesforce first if online
+                string salesforceId = null;
+                bool syncedToSalesforce = false;
+
+                if (!IsOfflineMode) // Online
                 {
                     try
                     {
-                        // Try to submit directly to Salesforce
+                        Console.WriteLine("[StockTakePage] Attempting direct submission to Salesforce");
                         await _salesforceService.EnsureAuthenticatedAsync();
+
                         salesforceId = await _salesforceService.CreateStockTakeRecord(stockTake);
 
                         if (!string.IsNullOrEmpty(salesforceId))
                         {
-                            // Success! Update local record with Salesforce ID
-                            stockTake.Id = salesforceId;
-                            stockTake.IsSynced = true;
-                            stockTake.SyncTimestamp = DateTime.Now;
-                            directlySynced = true;
-
-                            Console.WriteLine($"[StockTakePage] Successfully created record in Salesforce with ID: {salesforceId}");
+                            syncedToSalesforce = true;
+                            Console.WriteLine($"[StockTakePage] Successfully submitted to Salesforce: {salesforceId}");
 
                             // Upload photos if available
                             if (_photoPaths.Count > 0)
                             {
-                                // Note: This would need to be implemented separately
-                                // await UploadPhotosAsync(salesforceId, _photoPaths);
+                                try
+                                {
+                                    // Note: You'd need to implement photo upload here or call a service method
+                                    Console.WriteLine($"[StockTakePage] Uploading {_photoPaths.Count} photos to Salesforce");
+                                    // await UploadPhotosToSalesforceAsync(salesforceId, _photoPaths);
+                                }
+                                catch (Exception photoEx)
+                                {
+                                    Console.WriteLine($"[StockTakePage] Photo upload failed: {photoEx.Message}");
+                                }
                             }
                         }
                     }
                     catch (Exception sfEx)
                     {
-                        // Salesforce sync failed, will save locally instead
-                        Console.WriteLine($"[StockTakePage] Failed to sync directly to Salesforce: {sfEx.Message}");
-                        stockTake.IsSynced = false;
-                        stockTake.SyncAttempts = 1;
-                        stockTake.SyncErrorMessage = sfEx.Message;
+                        Console.WriteLine($"[StockTakePage] Salesforce submission failed: {sfEx.Message}");
+                        // Will fall back to local save below
                     }
+                }
+
+                // 5. Save to local database (always save as backup/record)
+                if (syncedToSalesforce)
+                {
+                    // Mark as already synced
+                    stockTake.Id = salesforceId;
+                    stockTake.IsSynced = true;
+                    stockTake.SyncTimestamp = DateTime.Now;
+                    stockTake.SyncAttempts = 1;
                 }
                 else
                 {
-                    // We're offline, mark for future sync
+                    // Mark as needs syncing
                     stockTake.IsSynced = false;
                     stockTake.SyncAttempts = 0;
                 }
 
-                // 5. Save to local database regardless of sync status
-                // This ensures we have a local record and can recover from failed syncs
+                // Save to local database
                 var localId = await _databaseService.SaveStockTakeRecordAsync(stockTake);
-                Console.WriteLine($"[StockTakePage] Saved stock take to local database with ID: {localId}");
+                Console.WriteLine($"[StockTakePage] Saved to local database with LocalId: {localId}");
 
                 // 6. Show appropriate success message
-                FullScreenLoadingOverlay.IsVisible = false;
-                if (directlySynced)
+                if (syncedToSalesforce)
                 {
                     await DisplayAlert("Success",
-                        "Stock take has been successfully submitted to Salesforce!",
+                        "Stock take submitted successfully to Salesforce!",
                         "OK");
                 }
-                else if (isOnline)
+                else if (IsOfflineMode)
                 {
-                    await DisplayAlert("Saved Locally",
-                        "Stock take saved locally. Sync to Salesforce failed, will retry later.",
+                    await DisplayAlert("Saved Offline",
+                        "Stock take saved locally. Will sync to Salesforce when connected.",
                         "OK");
                 }
                 else
                 {
-                    await DisplayAlert("Saved Offline",
-                        "Stock take saved locally. Will sync to Salesforce when connection is restored.",
+                    await DisplayAlert("Saved Locally",
+                        "Stock take saved locally. Sync to Salesforce failed, will retry automatically.",
                         "OK");
                 }
 
-                // 7. Navigate back to previous page
+                // 7. Navigate back
                 await Navigation.PopAsync();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[StockTakePage] Error submitting: {ex.Message}");
                 await DisplayAlert("Error", $"Could not save stock take: {ex.Message}", "OK");
-
-                // Hide spinner and re-enable button
-                FullScreenLoadingOverlay.IsVisible = false;
-                SubmitButton.IsEnabled = true;
             }
             finally
             {
-                // Ensure everything is reset if we're still on this page
-                if (Navigation.NavigationStack.LastOrDefault() is StockTakePage)
-                {
-                    FullScreenLoadingOverlay.IsVisible = false;
-                    SubmitButton.IsEnabled = true;
-                }
+                // Reset button
+                SubmitButton.Text = "Submit Stock Take";
+                SubmitButton.IsEnabled = true;
             }
         }
 

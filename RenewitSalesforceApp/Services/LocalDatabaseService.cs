@@ -147,6 +147,36 @@ namespace RenewitSalesforceApp.Services
                 return false;
             }
         }
+
+        public async Task<StockTakeRecord> GetStockTakeRecordByIdAsync(int localId)
+        {
+            await EnsureInitializedAsync();
+            return await _database.Table<StockTakeRecord>()
+                .Where(s => s.LocalId == localId)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task CleanupSyncedRecordsAsync(int daysOld = 30)
+        {
+            await EnsureInitializedAsync();
+
+            var cutoffDate = DateTime.Now.AddDays(-daysOld);
+
+            // Clean up records that were successfully synced to Salesforce more than X days ago
+            var oldSyncedRecords = await _database.Table<StockTakeRecord>()
+                .Where(s => s.IsSynced &&
+                           s.SyncTimestamp.HasValue &&
+                           s.SyncTimestamp.Value <= cutoffDate)
+                .ToListAsync();
+
+            foreach (var record in oldSyncedRecords)
+            {
+                Console.WriteLine($"[LocalDB] Cleaning up old synced record: {record.Vehicle_Registration__c} (SF ID: {record.Id})");
+                await _database.DeleteAsync(record);
+            }
+
+            Console.WriteLine($"[LocalDB] Cleaned up {oldSyncedRecords.Count} old synced records");
+        }
         #endregion
     }
 }

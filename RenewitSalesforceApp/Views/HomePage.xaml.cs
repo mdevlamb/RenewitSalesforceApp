@@ -147,62 +147,21 @@ namespace RenewitSalesforceApp.Views
                 {
                     Console.WriteLine("HomePage: Network restored after being offline");
 
-                    // Reload pending transactions to check if we need to sync
-                    await Task.Delay(1000); // Short delay to ensure everything is ready
+                    // Short delay to let SyncService start first (it responds to same connectivity event)
+                    await Task.Delay(2000);
+
+                    // Reload to check current status
                     LoadPendingTransactions();
 
+                    // Only try to sync if SyncService hasn't already handled it
                     if (HasPendingTransactions)
                     {
                         Console.WriteLine("HomePage: Auto-sync initiated due to restored connectivity");
-
-                        // Instead of showing a blocking alert, directly start auto-sync
-                        // Get StockTakeService from DI
-                        var stockTakeService = Application.Current?.Handler?.MauiContext?.Services.GetService<StockTakeService>();
-                        if (stockTakeService != null)
-                        {
-                            // Find the sync indicator label
-                            Label syncIndicator = FindByName("SyncIndicator") as Label;
-
-                            // Show subtle sync indicator if available
-                            if (syncIndicator != null)
-                            {
-                                syncIndicator.IsVisible = true;
-                                syncIndicator.Text = "Auto-Syncing...";
-                            }
-
-                            // Perform the sync
-                            try
-                            {
-                                int syncedCount = await stockTakeService.SyncStockTakesAsync();
-                                Console.WriteLine($"HomePage: Auto-sync completed. {syncedCount} records synced");
-
-                                // Update the pending count after sync
-                                LoadPendingTransactions();
-
-                                // Show temporary success message if indicator is available
-                                if (syncIndicator != null && syncedCount > 0)
-                                {
-                                    syncIndicator.Text = $"Auto-Synced {syncedCount} records";
-                                    await Task.Delay(3000); // Keep message visible for 3 seconds
-                                    syncIndicator.IsVisible = false;
-                                }
-                                else if (syncIndicator != null)
-                                {
-                                    syncIndicator.IsVisible = false;
-                                }
-                            }
-                            catch (Exception syncEx)
-                            {
-                                Console.WriteLine($"HomePage: Auto-sync error: {syncEx.Message}");
-
-                                if (syncIndicator != null)
-                                {
-                                    syncIndicator.Text = "Sync failed";
-                                    await Task.Delay(3000);
-                                    syncIndicator.IsVisible = false;
-                                }
-                            }
-                        }
+                        await PerformAutoSyncWithUIFeedback("Network connection restored.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("HomePage: No pending transactions found (likely synced by background service)");
                     }
                 }
 
@@ -237,11 +196,8 @@ namespace RenewitSalesforceApp.Views
                 // Force a UI update for HasPendingTransactions
                 OnPropertyChanged(nameof(HasPendingTransactions));
 
-                // Auto-sync if we're online and have pending transactions
-                if (!IsOfflineMode && HasPendingTransactions)
-                {
-                    await TryAutoSyncAsync();
-                }
+                // NO AUTO-SYNC - Let user manually sync if needed
+                Console.WriteLine("HomePage: Page loaded, pending transactions refreshed. User can manually sync if needed.");
             }
             catch (Exception ex)
             {
@@ -249,11 +205,14 @@ namespace RenewitSalesforceApp.Views
             }
         }
 
-        private async Task TryAutoSyncAsync()
+        private async Task PerformAutoSyncWithUIFeedback(string reason)
         {
             try
             {
-                Console.WriteLine("HomePage: Starting auto-sync process");
+                Console.WriteLine($"HomePage: Starting auto-sync process. Reason: {reason}");
+
+                // Show loading indicator
+                IsBusy = true;
 
                 // Get StockTakeService from DI
                 var stockTakeService = Application.Current?.Handler?.MauiContext?.Services.GetService<StockTakeService>();
@@ -263,53 +222,76 @@ namespace RenewitSalesforceApp.Views
                     return;
                 }
 
-                // Find the sync indicator label
-                Label syncIndicator = FindByName("SyncIndicator") as Label;
-
-                // Show subtle sync indicator if available
-                if (syncIndicator != null)
-                {
-                    syncIndicator.IsVisible = true;
-                    syncIndicator.Text = "Syncing...";
-                }
-
                 // Perform the sync
                 int syncedCount = await stockTakeService.SyncStockTakesAsync();
 
-                if (syncedCount > 0)
-                {
-                    Console.WriteLine($"HomePage: Auto-sync successful - synced {syncedCount} records");
-                    // Update the pending count after successful sync
-                    LoadPendingTransactions();
+                Console.WriteLine($"HomePage: Auto-sync completed. Synced count: {syncedCount}");
 
-                    // Show temporary success message if indicator is available
-                    if (syncIndicator != null)
-                    {
-                        syncIndicator.Text = $"Synced {syncedCount} records";
-                        await Task.Delay(3000); // Keep message visible for 3 seconds
-                        syncIndicator.IsVisible = false;
-                    }
-                }
-                else
+                // Small delay to ensure sync is fully complete
+                await Task.Delay(500);
+
+                // Update the pending count after sync
+                LoadPendingTransactions();
+
+                // Show appropriate message to user - ensure we're on UI thread and add delay
+                await Task.Delay(1000); // Give UI time to settle after hiding loading spinner
+
+                await MainThread.InvokeOnMainThreadAsync(async () =>
                 {
-                    Console.WriteLine("HomePage: Auto-sync completed with 0 records synced");
-                    if (syncIndicator != null)
+                    Console.WriteLine($"HomePage: About to show alert. SyncedCount: {syncedCount}, HasPendingTransactions: {HasPendingTransactions}");
+
+                    if (syncedCount > 0)
                     {
-                        syncIndicator.IsVisible = false;
+                        Console.WriteLine($"HomePage: Showing success alert for {syncedCount} synced records");
+                        await DisplayAlert("Auto-Sync Complete",
+                            $"{reason}\n\nSuccessfully synced {syncedCount} stock take{(syncedCount > 1 ? "s" : "")} to Salesforce!",
+                            "Great!");
+                        Console.WriteLine($"HomePage: Success alert displayed");
                     }
-                }
+                    else
+                    {
+                        Console.WriteLine("HomePage: Auto-sync completed with 0 records synced");
+
+                        // Check if sync was skipped due to another sync in progress
+                        if (HasPendingTransactions)
+                        {
+                            // There are still pending items, so sync was likely skipped
+                            await DisplayAlert("Auto-Sync In Progress",
+                                $"{reason}\n\nSync is already running in the background. Please wait for it to complete.",
+                                "OK");
+                            Console.WriteLine($"HomePage: Sync in progress alert displayed");
+                        }
+                        else
+                        {
+                            // No pending items, so sync was successful (done by background service)
+                            await DisplayAlert("Auto-Sync Complete",
+                                $"{reason}\n\nSync completed successfully by background service.",
+                                "OK");
+                            Console.WriteLine($"HomePage: Background sync completion alert displayed");
+                        }
+                    }
+                });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"HomePage: Auto-sync error: {ex.Message}");
 
-                Label syncIndicator = FindByName("SyncIndicator") as Label;
-                if (syncIndicator != null)
+                await MainThread.InvokeOnMainThreadAsync(async () =>
                 {
-                    syncIndicator.Text = "Sync failed";
-                    await Task.Delay(3000);
-                    syncIndicator.IsVisible = false;
-                }
+                    await DisplayAlert("Auto-Sync Failed",
+                        $"{reason} Failed to sync stock takes. Will retry later.\n\nError: {ex.Message}",
+                        "OK");
+                });
+            }
+            finally
+            {
+                // Hide loading indicator with delay to ensure user sees the completion
+                await Task.Delay(500);
+                await MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    Console.WriteLine("HomePage: Hiding loading indicator");
+                    IsBusy = false;
+                });
             }
         }
 
@@ -376,14 +358,15 @@ namespace RenewitSalesforceApp.Views
             }
 
             // Show user we're working
-            IsBusy = true;
-
             Button syncButton = sender as Button;
             if (syncButton != null)
             {
                 syncButton.IsEnabled = false;
                 syncButton.Text = "Syncing...";
             }
+
+            // Show loading indicator
+            IsBusy = true;
 
             try
             {
@@ -392,31 +375,56 @@ namespace RenewitSalesforceApp.Views
                 // Perform the sync
                 int syncedCount = await stockTakeService.SyncStockTakesAsync();
 
-                // Refresh the pending transactions count
-                LoadPendingTransactions();
+                Console.WriteLine($"HomePage: Sync completed, synced count: {syncedCount}");
 
-                if (syncedCount > 0)
+                // Important: Wait a moment before refreshing to ensure sync is fully complete
+                await Task.Delay(500);
+
+                // Refresh the pending transactions count on the UI thread
+                await MainThread.InvokeOnMainThreadAsync(() =>
                 {
-                    await DisplayAlert("Sync Complete", $"Successfully synced {syncedCount} stock take(s) to Salesforce.", "OK");
-                }
-                else
+                    LoadPendingTransactions();
+                });
+
+                // Show result message on UI thread
+                await MainThread.InvokeOnMainThreadAsync(async () =>
                 {
-                    await DisplayAlert("Sync Complete", "No records needed syncing or all sync attempts failed.", "OK");
-                }
+                    if (syncedCount > 0)
+                    {
+                        await DisplayAlert("Sync Complete",
+                            $"Successfully synced {syncedCount} stock take{(syncedCount != 1 ? "s" : "")} to Salesforce.",
+                            "OK");
+                    }
+                    else
+                    {
+                        await DisplayAlert("Sync Complete",
+                            "No records needed syncing or all sync attempts failed.",
+                            "OK");
+                    }
+                });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"HomePage: Manual sync error: {ex.Message}");
-                await DisplayAlert("Sync Failed", $"An error occurred: {ex.Message}", "OK");
+
+                // Show error on UI thread
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    await DisplayAlert("Sync Failed", $"An error occurred: {ex.Message}", "OK");
+                });
             }
             finally
             {
-                IsBusy = false;
-                if (syncButton != null)
+                // Reset UI on main thread
+                await MainThread.InvokeOnMainThreadAsync(() =>
                 {
-                    syncButton.IsEnabled = true;
-                    syncButton.Text = "Sync";
-                }
+                    IsBusy = false;
+                    if (syncButton != null)
+                    {
+                        syncButton.IsEnabled = true;
+                        syncButton.Text = "Sync";
+                    }
+                });
             }
         }
 

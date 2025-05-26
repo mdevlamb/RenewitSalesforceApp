@@ -82,7 +82,7 @@
                            Padding="20">
                         <VerticalStackLayout Spacing="15">
                             <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
-                                <Label Text="&#xe8d5;"
+                                <Label Text="&#xeb8d;"
                                        FontFamily="MaterialIcons"
                                        FontSize="20"
                                        TextColor="#007AFF"
@@ -117,7 +117,7 @@
                            Padding="20">
                         <VerticalStackLayout Spacing="15">
                             <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
-                                <Label Text="&#xe8b6;"
+                                <Label Text="&#xe531;"
                                        FontFamily="MaterialIcons"
                                        FontSize="20"
                                        TextColor="#28a745"
@@ -220,7 +220,7 @@
                            Padding="20">
                         <VerticalStackLayout Spacing="15">
                             <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
-                                <Label Text="&#xe55c;"
+                                <Label Text="&#xe55b;"
                                        FontFamily="MaterialIcons"
                                        FontSize="20"
                                        TextColor="#ff6b35"

@@ -13,6 +13,9 @@ namespace RenewitSalesforceApp.Services
         private readonly SalesforceService _sfService;
         private readonly AuthService _authService;
 
+        private readonly SemaphoreSlim _syncSemaphore = new SemaphoreSlim(1, 1);
+        private readonly HashSet<int> _syncingRecords = new HashSet<int>();
+
         public StockTakeService(
             LocalDatabaseService dbService,
             SalesforceService sfService,
@@ -120,84 +123,121 @@ namespace RenewitSalesforceApp.Services
         }
 
         /// <summary>
-        /// Sync all pending stock takes to Salesforce
+        /// Sync all pending stock takes to Salesforce - Simplified without background sync competition
         /// </summary>
         public async Task<int> SyncStockTakesAsync()
         {
-            if (Connectivity.NetworkAccess != NetworkAccess.Internet)
+            // Prevent concurrent sync operations with reasonable wait time
+            if (!await _syncSemaphore.WaitAsync(5000)) // 5 second wait
             {
-                Console.WriteLine("[StockTakeService] No internet connection for sync");
-                return 0;
+                Console.WriteLine("[StockTakeService] Another sync is in progress, please wait");
+                return -1; // Return -1 to indicate sync was busy
             }
 
-            Console.WriteLine("[StockTakeService] Starting sync of stock takes");
-
-            int syncedCount = 0;
-            var pendingRecords = await _dbService.GetUnsyncedStockTakeRecordsAsync();
-
-            if (pendingRecords.Count == 0)
+            try
             {
-                Console.WriteLine("[StockTakeService] No pending records to sync");
-                return 0;
-            }
-
-            Console.WriteLine($"[StockTakeService] Found {pendingRecords.Count} records to sync");
-
-            // Ensure authenticated with Salesforce
-            await _sfService.EnsureAuthenticatedAsync();
-
-            foreach (var stockTake in pendingRecords)
-            {
-                try
+                if (Connectivity.NetworkAccess != NetworkAccess.Internet)
                 {
-                    Console.WriteLine($"[StockTakeService] Syncing record: {stockTake.Vehicle_Registration__c}");
+                    Console.WriteLine("[StockTakeService] No internet connection for sync");
+                    return 0;
+                }
 
-                    // Increment sync attempt count
-                    stockTake.SyncAttempts++;
-                    await _dbService.SaveStockTakeRecordAsync(stockTake);
+                Console.WriteLine("[StockTakeService] Starting sync of stock takes");
 
-                    // Create the record in Salesforce using your existing method
-                    string sfId = await _sfService.CreateStockTakeRecord(stockTake);
+                int syncedCount = 0;
+                var pendingRecords = await _dbService.GetUnsyncedStockTakeRecordsAsync();
 
-                    if (!string.IsNullOrEmpty(sfId))
+                if (pendingRecords.Count == 0)
+                {
+                    Console.WriteLine("[StockTakeService] No pending records to sync");
+                    return 0;
+                }
+
+                Console.WriteLine($"[StockTakeService] Found {pendingRecords.Count} records to sync");
+
+                // Ensure authenticated with Salesforce
+                await _sfService.EnsureAuthenticatedAsync();
+
+                foreach (var stockTake in pendingRecords)
+                {
+                    // Skip if already being synced
+                    if (_syncingRecords.Contains(stockTake.LocalId))
                     {
-                        Console.WriteLine($"[StockTakeService] Successfully created record in Salesforce with ID: {sfId}");
+                        Console.WriteLine($"[StockTakeService] Record {stockTake.LocalId} already being synced, skipping");
+                        continue;
+                    }
 
-                        // Upload photos if we have them
-                        if (!string.IsNullOrEmpty(stockTake.AllPhotoPaths))
+                    // Mark as being synced
+                    _syncingRecords.Add(stockTake.LocalId);
+
+                    try
+                    {
+                        // Double-check it's still unsynced (could have been synced by another process)
+                        var currentRecord = await _dbService.GetStockTakeRecordByIdAsync(stockTake.LocalId);
+                        if (currentRecord == null || currentRecord.IsSynced)
                         {
-                            await UploadPhotosToSalesforce(sfId, stockTake.AllPhotoPaths);
+                            Console.WriteLine($"[StockTakeService] Record {stockTake.LocalId} already synced or deleted, skipping");
+                            continue;
                         }
 
-                        // Mark as synced in the local database
-                        await _dbService.MarkStockTakeAsSyncedAsync(stockTake.LocalId, sfId);
-                        Console.WriteLine($"[StockTakeService] Marked record as synced in local database");
+                        Console.WriteLine($"[StockTakeService] Syncing record: {stockTake.Vehicle_Registration__c}");
 
-                        syncedCount++;
+                        // Increment sync attempt count
+                        stockTake.SyncAttempts++;
+                        await _dbService.SaveStockTakeRecordAsync(stockTake);
+
+                        // Create the record in Salesforce
+                        string sfId = await _sfService.CreateStockTakeRecord(stockTake);
+
+                        if (!string.IsNullOrEmpty(sfId))
+                        {
+                            Console.WriteLine($"[StockTakeService] Successfully created record in Salesforce with ID: {sfId}");
+
+                            // Upload photos if we have them
+                            if (!string.IsNullOrEmpty(stockTake.AllPhotoPaths))
+                            {
+                                await UploadPhotosToSalesforce(sfId, stockTake.AllPhotoPaths);
+                            }
+
+                            // Mark as synced in the local database
+                            await _dbService.MarkStockTakeAsSyncedAsync(stockTake.LocalId, sfId);
+                            Console.WriteLine($"[StockTakeService] Marked record as synced in local database");
+
+                            syncedCount++;
+                        }
+                        else
+                        {
+                            Console.WriteLine("[StockTakeService] Failed to create record in Salesforce - empty ID returned");
+                            stockTake.SyncErrorMessage = "Failed to create record in Salesforce";
+                            await _dbService.SaveStockTakeRecordAsync(stockTake);
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        Console.WriteLine("[StockTakeService] Failed to create record in Salesforce - empty ID returned");
-                        stockTake.SyncErrorMessage = "Failed to create record in Salesforce";
+                        Console.WriteLine($"[StockTakeService] Error syncing stock take: {ex.Message}");
+                        stockTake.SyncErrorMessage = ex.Message;
                         await _dbService.SaveStockTakeRecordAsync(stockTake);
                     }
+                    finally
+                    {
+                        // Remove from syncing set
+                        _syncingRecords.Remove(stockTake.LocalId);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[StockTakeService] Error syncing stock take: {ex.Message}");
-                    stockTake.SyncErrorMessage = ex.Message;
-                    await _dbService.SaveStockTakeRecordAsync(stockTake);
-                }
+
+                Console.WriteLine($"[StockTakeService] Sync completed. Successfully synced {syncedCount} records");
+
+                // Check if we still have pending records
+                var remainingRecords = await _dbService.GetUnsyncedStockTakeRecordsAsync();
+                bool stillHasPending = remainingRecords != null && remainingRecords.Count > 0;
+                Preferences.Set("HasPendingStockTakes", stillHasPending);
+
+                return syncedCount;
             }
-
-            Console.WriteLine($"[StockTakeService] Sync completed. Successfully synced {syncedCount} records");
-
-            // Check if we still have pending records
-            var remainingRecords = await _dbService.GetUnsyncedStockTakeRecordsAsync();
-            bool stillHasPending = remainingRecords != null && remainingRecords.Count > 0;
-            Preferences.Set("HasPendingStockTakes", stillHasPending);
-
-            return syncedCount;
+            finally
+            {
+                _syncSemaphore.Release();
+            }
         }
 
         private async Task UploadPhotosToSalesforce(string salesforceRecordId, string allPhotoPaths)
