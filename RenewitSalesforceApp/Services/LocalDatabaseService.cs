@@ -105,7 +105,8 @@ namespace RenewitSalesforceApp.Services
             await EnsureInitializedAsync();
             return await _database.Table<StockTakeRecord>()
                 .Where(s => !s.IsSynced)
-                .OrderByDescending(s => s.Stock_Take_Date__c)
+                // Changed from OrderByDescending to OrderBy
+                .OrderBy(s => s.Stock_Take_Date__c)
                 .ToListAsync();
         }
 

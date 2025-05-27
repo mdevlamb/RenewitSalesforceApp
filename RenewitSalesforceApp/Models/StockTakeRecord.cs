@@ -110,11 +110,14 @@ namespace RenewitSalesforceApp.Models
         /// <summary>
         /// Auto-generates REFID with current timestamp
         /// </summary>
-        public void GenerateRefId()
+        public void GenerateRefId(DateTime? dateTime = null)
         {
+            // Use the provided dateTime or get the current time
+            DateTime timeToUse = dateTime ?? DateTime.Now;
+            
             // Use same timezone-aware format as Stock Take Date for consistency
-            REFID__c = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffK");
-            Console.WriteLine($"[StockTakeRecord] Generated REFID: {REFID__c} at {DateTime.Now}");
+            REFID__c = timeToUse.ToString("yyyy-MM-ddTHH:mm:ss.fffK");
+            Console.WriteLine($"[StockTakeRecord] Generated REFID: {REFID__c} at {timeToUse}");
         }
 
         // Helper properties

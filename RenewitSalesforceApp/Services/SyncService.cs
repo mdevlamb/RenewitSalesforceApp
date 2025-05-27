@@ -9,7 +9,6 @@ namespace RenewitSalesforceApp.Services
     public class SyncService
     {
         private readonly StockTakeService _stockTakeService;
-        private readonly Timer _syncTimer;
         private readonly Timer _cleanupTimer;
         private bool _isOnline = false;
         private readonly SemaphoreSlim _syncSemaphore = new SemaphoreSlim(1, 1);
@@ -18,11 +17,10 @@ namespace RenewitSalesforceApp.Services
         {
             _stockTakeService = stockTakeService;
 
-            // Check connectivity every 2 minutes
-            _syncTimer = new Timer(CheckAndSync, null, TimeSpan.Zero, TimeSpan.FromMinutes(2));
+            // Keep cleanup timer - runs once daily to clean old records
             _cleanupTimer = new Timer(PerformCleanup, null, TimeSpan.FromHours(1), TimeSpan.FromHours(24));
 
-            // FIXED: Enable connectivity change events
+            // Enable connectivity change events
             Connectivity.ConnectivityChanged += OnConnectivityChanged;
             _isOnline = Connectivity.NetworkAccess == NetworkAccess.Internet;
 
@@ -38,31 +36,8 @@ namespace RenewitSalesforceApp.Services
 
             if (!wasOnline && _isOnline)
             {
-                Console.WriteLine("[SyncService] Connection restored, triggering background sync");
+                Console.WriteLine("[SyncService] Connection restored, triggering sync");
                 _ = Task.Run(async () => await TriggerSyncAsync());
-            }
-        }
-
-        private async void CheckAndSync(object state)
-        {
-            try
-            {
-                // Update online status
-                _isOnline = Connectivity.NetworkAccess == NetworkAccess.Internet;
-
-                if (_isOnline)
-                {
-                    var pendingRecords = await _stockTakeService.GetUnsyncedStockTakesAsync();
-                    if (pendingRecords?.Count > 0)
-                    {
-                        Console.WriteLine($"[SyncService] Timer check: {pendingRecords.Count} pending records found");
-                        await TriggerSyncAsync();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SyncService] Timer check error: {ex.Message}");
             }
         }
 
@@ -124,7 +99,6 @@ namespace RenewitSalesforceApp.Services
 
         public void Dispose()
         {
-            _syncTimer?.Dispose();
             _cleanupTimer?.Dispose();
             Connectivity.ConnectivityChanged -= OnConnectivityChanged;
             _syncSemaphore?.Dispose();

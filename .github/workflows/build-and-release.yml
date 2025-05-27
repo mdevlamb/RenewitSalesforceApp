@@ -35,21 +35,19 @@ jobs:
         # Get current version from csproj
         $xml = [Xml] (Get-Content "./RenewitSalesforceApp/RenewitSalesforceApp.csproj")
         $displayVersion = $xml.Project.PropertyGroup.ApplicationDisplayVersion
-        $buildNumber = [int]$xml.Project.PropertyGroup.ApplicationVersion
         
-        # Increment build number
-        $newBuildNumber = $buildNumber + 1
+        # Use GitHub run number as build number (no file modification needed)
+        $buildNumber = $env:GITHUB_RUN_NUMBER
         
-        # Update csproj
-        $xml.Project.PropertyGroup.ApplicationVersion = $newBuildNumber.ToString()
-        $xml.Save("./RenewitSalesforceApp/RenewitSalesforceApp.csproj")
+        Write-Host "Version: $displayVersion"
+        Write-Host "Build Number: $buildNumber"
         
         # Set outputs AND environment variables
         echo "VERSION=$displayVersion" >> $env:GITHUB_OUTPUT
-        echo "BUILD_NUMBER=$newBuildNumber" >> $env:GITHUB_OUTPUT
-        echo "TAG=v$displayVersion-$newBuildNumber" >> $env:GITHUB_OUTPUT
+        echo "BUILD_NUMBER=$buildNumber" >> $env:GITHUB_OUTPUT
+        echo "TAG=v$displayVersion-$buildNumber" >> $env:GITHUB_OUTPUT
         echo "VERSION=$displayVersion" >> $env:GITHUB_ENV
-        echo "BUILD_NUMBER=$newBuildNumber" >> $env:GITHUB_ENV
+        echo "BUILD_NUMBER=$buildNumber" >> $env:GITHUB_ENV
     
     - name: Restore dependencies
       run: dotnet restore
@@ -70,6 +68,7 @@ jobs:
         dotnet publish RenewitSalesforceApp/RenewitSalesforceApp.csproj `
           -f net8.0-android `
           -c Release `
+          -p:ApplicationVersion=${{ steps.version.outputs.BUILD_NUMBER }} `
           -p:AndroidKeyStore=true `
           -p:AndroidSigningKeyStore=${{ steps.decode_keystore.outputs.filePath }} `
           -p:AndroidSigningKeyAlias=${{ secrets.KEY_ALIAS }} `
@@ -81,8 +80,20 @@ jobs:
       shell: pwsh
       run: |
         # Get commits since last tag
-        $commits = $(git log --pretty=format:"- %s" -10)
-        $notes = $commits -join "`n"
+        $lastTag = $(git describe --tags --abbrev=0 2>$null)
+        if ($lastTag) {
+            Write-Host "Getting commits since $lastTag"
+            $commits = $(git log "$lastTag..HEAD" --pretty=format:"- %s" --no-merges)
+        } else {
+            Write-Host "No previous tags found, getting last 10 commits"
+            $commits = $(git log --pretty=format:"- %s" -10 --no-merges)
+        }
+        
+        if ($commits) {
+            $notes = $commits -join "`n"
+        } else {
+            $notes = "- Initial release"
+        }
         
         # Escape newlines for GitHub Actions output
         $notes = $notes -replace "`n", "%0A"
@@ -152,8 +163,9 @@ jobs:
     
         Write-Host "✅ Created version.json successfully"
     
-    - name: Commit changes
+    - name: Commit version.json only
       uses: stefanzweifel/git-auto-commit-action@v4
       with:
-        commit_message: "Bump build number to ${{ steps.version.outputs.BUILD_NUMBER }} [skip ci]"
-        file_pattern: "RenewitSalesforceApp/RenewitSalesforceApp.csproj docs/version.json"
+        commit_message: "Update version.json for v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }} [skip ci]"
+        file_pattern: "docs/version.json"
+        skip_dirty_check: true

@@ -29,19 +29,6 @@ namespace RenewitSalesforceApp
                     var services = Handler?.MauiContext?.Services;
                     if (services != null)
                     {
-                        // Initialize SyncService
-                        var syncService = services.GetService<SyncService>();
-                        if (syncService != null)
-                        {
-                            Console.WriteLine("[App] SyncService initialized for auto-sync");
-                            // Trigger initial sync check
-                            _ = Task.Run(async () => await syncService.TriggerSyncAsync());
-                        }
-                        else
-                        {
-                            Console.WriteLine("[App] ERROR: SyncService not found in DI container");
-                        }
-
                         // Initialize UpdateService
                         var updateService = services.GetService<UpdateService>();
                         if (updateService != null)

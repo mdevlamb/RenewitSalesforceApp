@@ -81,7 +81,7 @@ namespace RenewitSalesforceApp.Services
                 };
 
                 // Generate reference ID with timestamp
-                stockTake.GenerateRefId();
+                stockTake.GenerateRefId(DateTime.Now);
 
                 // Set stock take date and user using helper methods
                 stockTake.SetStockTakeDate(DateTime.Now);

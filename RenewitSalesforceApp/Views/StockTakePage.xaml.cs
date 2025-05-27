@@ -26,6 +26,8 @@ namespace RenewitSalesforceApp.Views
 
         private static readonly SemaphoreSlim _cameraSemaphore = new SemaphoreSlim(1, 1);
         private CameraBarcodeReaderView _currentBarcodeReader;
+        private bool _isCameraInUse = false;
+        private DateTime _lastCameraUse = DateTime.MinValue;
 
         public bool IsOfflineMode
         {
@@ -271,12 +273,23 @@ namespace RenewitSalesforceApp.Views
 
         private async void OnLicenseDiskScanClicked(object sender, EventArgs e)
         {
+            // Check if camera was recently used
+            var timeSinceLastUse = DateTime.Now - _lastCameraUse;
+            if (timeSinceLastUse.TotalSeconds < 2)
+            {
+                await DisplayAlert("Camera Busy", "Please wait a moment before using the camera again.", "OK");
+                return;
+            }
+
             // Wait for camera to be available
             if (!await _cameraSemaphore.WaitAsync(5000))
             {
                 await DisplayAlert("Camera Busy", "Camera is currently in use. Please wait and try again.", "OK");
                 return;
             }
+
+            _isCameraInUse = true;
+            _lastCameraUse = DateTime.Now;
 
             try
             {
@@ -294,8 +307,13 @@ namespace RenewitSalesforceApp.Views
                     }
                 }
 
-                // Add delay to ensure camera is fully available
-                await Task.Delay(500);
+                // Force garbage collection to clean up any previous camera resources
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                // Add longer delay to ensure camera is fully available
+                await Task.Delay(1000);
 
                 var barcodeReader = new CameraBarcodeReaderView
                 {
@@ -311,12 +329,12 @@ namespace RenewitSalesforceApp.Views
                 _currentBarcodeReader = barcodeReader;
 
                 var tcs = new TaskCompletionSource<string>();
-                bool hasScanned = false; // Prevent multiple scans
+                bool hasScanned = false;
 
                 // Event handler for barcode detection
                 barcodeReader.BarcodesDetected += async (s, args) =>
                 {
-                    if (hasScanned) return; // Prevent multiple triggers
+                    if (hasScanned) return;
 
                     if (args.Results?.Any() == true)
                     {
@@ -325,13 +343,16 @@ namespace RenewitSalesforceApp.Views
                         {
                             hasScanned = true;
 
-                            // SUCCESS FEEDBACK: Vibration + Sound
+                            // Immediately stop the camera
+                            MainThread.BeginInvokeOnMainThread(() =>
+                            {
+                                barcodeReader.IsEnabled = false;
+                            });
+
+                            // SUCCESS FEEDBACK
                             try
                             {
-                                // Vibrate for 200ms
                                 Vibration.Vibrate(TimeSpan.FromMilliseconds(200));
-
-                                // Play system sound (if available)
                                 await PlayScanSuccessSound();
                             }
                             catch (Exception feedbackEx)
@@ -347,21 +368,17 @@ namespace RenewitSalesforceApp.Views
                     }
                 };
 
-                // Create scanning overlay with focus guidelines
+                // Create scanning page content
                 var scanningOverlay = CreateScanningOverlay();
 
                 var cameraFrame = new Frame
                 {
                     Content = new Grid
                     {
-                        Children =
-                    {
-                        barcodeReader,
-                        scanningOverlay
-                    }
+                        Children = { barcodeReader, scanningOverlay }
                     },
                     Padding = new Thickness(0),
-                    CornerRadius = 6,           // Reduced from 20 to 6
+                    CornerRadius = 6,
                     IsClippedToBounds = true,
                     HeightRequest = 500,
                     WidthRequest = 380,
@@ -384,11 +401,14 @@ namespace RenewitSalesforceApp.Views
 
                 cancelButton.Clicked += (s, e) =>
                 {
-                    hasScanned = true; // Prevent scan after cancel
+                    hasScanned = true;
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        barcodeReader.IsEnabled = false;
+                    });
                     tcs.TrySetResult(null);
                 };
 
-                // Enhanced scanning UI
                 var stackLayout = new VerticalStackLayout
                 {
                     Padding = new Thickness(20),
@@ -439,10 +459,35 @@ namespace RenewitSalesforceApp.Views
                         : Color.FromArgb("#f8f9fa")
                 };
 
+                // Add disappearing handler to clean up
+                scanPage.Disappearing += (s, e) =>
+                {
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        if (_currentBarcodeReader != null)
+                        {
+                            _currentBarcodeReader.IsEnabled = false;
+                            _currentBarcodeReader = null;
+                        }
+                    });
+                };
+
                 await Navigation.PushModalAsync(scanPage);
 
                 // Wait for scan result
                 var result = await tcs.Task;
+
+                // Ensure camera is disabled before closing
+                await MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    if (_currentBarcodeReader != null)
+                    {
+                        _currentBarcodeReader.IsEnabled = false;
+                    }
+                });
+
+                // Add delay before closing to ensure camera is released
+                await Task.Delay(500);
 
                 // Close scanner page
                 await Navigation.PopModalAsync();
@@ -450,8 +495,6 @@ namespace RenewitSalesforceApp.Views
                 if (!string.IsNullOrEmpty(result))
                 {
                     Console.WriteLine($"[StockTakePage] Barcode scanned: {result}");
-
-                    // Parse the barcode data
                     ParseLicenseDiskBarcode(result);
                 }
             }
@@ -462,11 +505,18 @@ namespace RenewitSalesforceApp.Views
             }
             finally
             {
-                // Clean up barcode reader reference
+                // Clean up
                 _currentBarcodeReader = null;
+                _isCameraInUse = false;
+                _lastCameraUse = DateTime.Now;
 
-                // Add delay before releasing semaphore to ensure camera is fully released
-                await Task.Delay(1000);
+                // Force cleanup
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                // Add longer delay before releasing semaphore
+                await Task.Delay(2000);
                 _cameraSemaphore.Release();
                 Console.WriteLine("[StockTakePage] Barcode scanner released camera resources");
             }
@@ -876,26 +926,35 @@ namespace RenewitSalesforceApp.Views
 
         private async void OnTakePhotoClicked(object sender, EventArgs e)
         {
-            // FIXED: Better semaphore handling and resource cleanup
-            if (!await _cameraSemaphore.WaitAsync(3000)) // Reduced timeout
+            // Check if camera was recently used
+            var timeSinceLastUse = DateTime.Now - _lastCameraUse;
+            if (timeSinceLastUse.TotalSeconds < 2)
+            {
+                await DisplayAlert("Camera Busy", "Please wait a moment before using the camera again.", "OK");
+                return;
+            }
+
+            // Stricter timeout for photo capture
+            if (!await _cameraSemaphore.WaitAsync(3000))
             {
                 await DisplayAlert("Camera Busy", "Camera is currently in use. Please wait and try again.", "OK");
                 return;
             }
 
+            _isCameraInUse = true;
+            _lastCameraUse = DateTime.Now;
+
             try
             {
                 Console.WriteLine("[StockTakePage] Take photo button clicked");
 
-                // Check camera permission first
+                // Check camera permission
                 var cameraStatus = await Permissions.CheckStatusAsync<Permissions.Camera>();
                 if (cameraStatus != PermissionStatus.Granted)
                 {
-                    Console.WriteLine("[StockTakePage] Camera permission not granted, requesting...");
                     cameraStatus = await Permissions.RequestAsync<Permissions.Camera>();
                     if (cameraStatus != PermissionStatus.Granted)
                     {
-                        Console.WriteLine("[StockTakePage] Camera permission denied by user");
                         await DisplayAlert("Camera Permission", "Camera permission is required to take photos.", "OK");
                         return;
                     }
@@ -904,78 +963,50 @@ namespace RenewitSalesforceApp.Views
                 // Check if camera is available
                 if (!MediaPicker.Default.IsCaptureSupported)
                 {
-                    Console.WriteLine("[StockTakePage] Camera capture not supported on this device");
                     await DisplayAlert("Camera Not Available", "Camera is not available on this device.", "OK");
                     return;
                 }
 
+                // Force cleanup before using camera
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
                 // Show loading overlay
                 FullScreenLoadingOverlay.IsVisible = true;
-                Console.WriteLine("[StockTakePage] Starting camera capture...");
 
-                // Add delay to ensure camera is fully available after barcode scan
-                await Task.Delay(1500); // Increased delay for camera resource cleanup
+                // Longer delay to ensure camera is ready
+                await Task.Delay(2000);
 
                 FileResult photo = null;
 
                 try
                 {
-                    // Configure photo options
-                    var photoOptions = new MediaPickerOptions
+                    // Use a cancellation token for timeout
+                    using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
                     {
-                        Title = "Stock Take Photo"
-                    };
+                        var photoOptions = new MediaPickerOptions
+                        {
+                            Title = "Stock Take Photo"
+                        };
 
-                    // Take the photo with specific error handling
-                    photo = await MediaPicker.Default.CapturePhotoAsync(photoOptions);
+                        photo = await MediaPicker.Default.CapturePhotoAsync(photoOptions);
+                    }
                 }
-                catch (FeatureNotSupportedException ex)
+                catch (OperationCanceledException)
                 {
-                    Console.WriteLine($"[StockTakePage] Camera feature not supported: {ex.Message}");
-                    await DisplayAlert("Feature Not Supported",
-                        "Camera capture is not supported on this device.", "OK");
+                    Console.WriteLine("[StockTakePage] Camera capture timed out");
+                    await DisplayAlert("Timeout", "Camera took too long to respond. Please try again.", "OK");
                     return;
                 }
-                catch (PermissionException ex)
+                catch (Exception cameraEx)
                 {
-                    Console.WriteLine($"[StockTakePage] Camera permission exception: {ex.Message}");
-                    await DisplayAlert("Permission Required",
-                        "Camera permission is required. Please enable it in your device settings.", "OK");
-                    return;
-                }
-                catch (NotSupportedException ex)
-                {
-                    Console.WriteLine($"[StockTakePage] Camera not supported: {ex.Message}");
-                    await DisplayAlert("Camera Not Supported",
-                        "Camera functionality is not supported on this device.", "OK");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[StockTakePage] Camera capture failed: {ex.Message}");
-                    Console.WriteLine($"[StockTakePage] Exception type: {ex.GetType().Name}");
+                    Console.WriteLine($"[StockTakePage] Camera error: {cameraEx.Message}");
 
-                    // Specific error messages for camera conflicts
-                    string errorMessage;
-                    if (ex.Message.Contains("camera") && ex.Message.Contains("use"))
+                    string errorMessage = "Failed to access camera.";
+                    if (cameraEx.Message.Contains("busy") || cameraEx.Message.Contains("in use"))
                     {
-                        errorMessage = "Camera is busy with another operation. Please wait a moment and try again.";
-                    }
-                    else if (ex.Message.Contains("IMAGE_CAPTURE"))
-                    {
-                        errorMessage = "Camera app configuration issue. Please check if a camera app is installed.";
-                    }
-                    else if (ex.Message.Contains("FileProvider") || ex.Message.Contains("fileprovider"))
-                    {
-                        errorMessage = "Camera storage configuration issue. Please contact support.";
-                    }
-                    else if (ex.Message.Contains("permission"))
-                    {
-                        errorMessage = "Camera permission issue. Please enable camera access in settings.";
-                    }
-                    else
-                    {
-                        errorMessage = "Failed to access camera. Please try again or restart the app.";
+                        errorMessage = "Camera is busy. Please close other camera apps and try again.";
                     }
 
                     await DisplayAlert("Camera Error", errorMessage, "OK");
@@ -988,91 +1019,75 @@ namespace RenewitSalesforceApp.Views
 
                     try
                     {
-                        // Create a unique filename with timestamp
+                        // Save photo logic (unchanged)
                         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                         string vehicleReg = VehicleRegEntry.Text?.Replace(" ", "").Replace("/", "") ?? "Unknown";
                         string fileName = $"StockTake_{vehicleReg}_{timestamp}_{_photoPaths.Count + 1}.jpg";
 
-                        // Get the app's local data directory
                         string localAppData = FileSystem.AppDataDirectory;
                         string photosFolder = Path.Combine(localAppData, "StockTakePhotos");
-
-                        // Create photos directory if it doesn't exist
                         Directory.CreateDirectory(photosFolder);
-                        Console.WriteLine($"[StockTakePage] Photos directory: {photosFolder}");
 
-                        // Full path for the saved photo
                         string localFilePath = Path.Combine(photosFolder, fileName);
 
-                        // FIXED: Use proper stream disposal (FileResult doesn't need disposal)
                         using (var sourceStream = await photo.OpenReadAsync())
                         {
                             using (var localFileStream = File.Create(localFilePath))
                             {
                                 await sourceStream.CopyToAsync(localFileStream);
-                                await localFileStream.FlushAsync(); // Ensure write completes
+                                await localFileStream.FlushAsync();
                             }
                         }
 
-                        // FileResult doesn't need disposal - just set to null for GC
-
-                        // Verify file was saved
                         if (File.Exists(localFilePath))
                         {
                             var fileInfo = new FileInfo(localFilePath);
-                            Console.WriteLine($"[StockTakePage] Photo saved successfully: {localFilePath} ({fileInfo.Length} bytes)");
+                            Console.WriteLine($"[StockTakePage] Photo saved: {localFilePath} ({fileInfo.Length} bytes)");
 
-                            // Add to our photo paths list
                             _photoPaths.Add(localFilePath);
-
-                            // Update UI
                             await UpdatePhotoDisplay();
 
-                            // Show success message
                             await DisplayAlert("Photo Taken",
-                                $"Photo {_photoPaths.Count} captured and saved successfully!",
+                                $"Photo {_photoPaths.Count} captured successfully!",
                                 "Great!");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[StockTakePage] Error: Photo file was not created at {localFilePath}");
-                            await DisplayAlert("Save Error", "Photo was taken but could not be saved.", "OK");
                         }
                     }
                     catch (Exception saveEx)
                     {
                         Console.WriteLine($"[StockTakePage] Error saving photo: {saveEx.Message}");
-                        await DisplayAlert("Save Error",
-                            $"Photo was taken but could not be saved: {saveEx.Message}", "OK");
+                        await DisplayAlert("Save Error", "Photo was taken but could not be saved.", "OK");
                     }
                 }
                 else
                 {
                     Console.WriteLine("[StockTakePage] Photo capture was cancelled by user");
-                    // Don't show an alert for user cancellation - it's expected behavior
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StockTakePage] Unexpected error in photo capture: {ex.Message}");
-                Console.WriteLine($"[StockTakePage] Stack trace: {ex.StackTrace}");
-                await DisplayAlert("Unexpected Error",
-                    $"An unexpected error occurred: {ex.Message}",
-                    "OK");
+                Console.WriteLine($"[StockTakePage] Unexpected error: {ex.Message}");
+                await DisplayAlert("Error", "An unexpected error occurred.", "OK");
             }
             finally
             {
-                // FIXED: Always hide loading overlay and release semaphore quickly
+                // Always clean up
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
                     FullScreenLoadingOverlay.IsVisible = false;
                 });
 
-                Console.WriteLine("[StockTakePage] Photo capture process completed");
+                _isCameraInUse = false;
+                _lastCameraUse = DateTime.Now;
 
-                // FIXED: Immediate semaphore release - no delay
+                // Force cleanup
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                // Delay before releasing semaphore
+                await Task.Delay(1000);
                 _cameraSemaphore.Release();
-                Console.WriteLine("[StockTakePage] Camera semaphore released");
+                Console.WriteLine("[StockTakePage] Camera resources released");
             }
         }
 
@@ -1515,7 +1530,7 @@ namespace RenewitSalesforceApp.Views
                 stockTake.Comments__c = CommentsEditor.Text;
 
                 // Set metadata
-                stockTake.GenerateRefId();
+                stockTake.GenerateRefId(DateTime.Now);
                 stockTake.SetStockTakeDate(DateTime.Now);
                 stockTake.SetStockTakeBy(_authService.CurrentUser?.Name ?? "Unknown User");
 

@@ -96,43 +96,44 @@ namespace RenewitSalesforceApp.Views
             }
         }
 
-        private async void LoadPendingTransactions()
+        private void LoadPendingTransactions()
         {
-            try
+            Task.Run(async () =>
             {
-                Console.WriteLine("HomePage: Loading pending transactions...");
-
-                // Get unsynced stock take records (only source of pending data now)
-                var unsyncedStockTakeRecords = await _databaseService.GetUnsyncedStockTakeRecordsAsync();
-
-                _pendingTransactionCount = unsyncedStockTakeRecords?.Count ?? 0;
-
-                Console.WriteLine($"HomePage: Found {_pendingTransactionCount} unsynced stock take records");
-
-                // Update the UI visibility
-                HasPendingTransactions = _pendingTransactionCount > 0;
-
-                Console.WriteLine($"HomePage: Setting HasPendingTransactions to {HasPendingTransactions}");
-
-                if (HasPendingTransactions)
+                try
                 {
-                    string transactionText = _pendingTransactionCount == 1
-                        ? "stock take waiting to sync"
-                        : "stock takes waiting to sync";
-                    PendingCountLabel.Text = $"{_pendingTransactionCount} {transactionText}";
-                    Console.WriteLine($"HomePage: Updated pending count label: {PendingCountLabel.Text}");
+                    Console.WriteLine("HomePage: Loading pending transactions...");
+
+                    // Get unsynced stock take records
+                    var unsyncedStockTakeRecords = await _databaseService.GetUnsyncedStockTakeRecordsAsync();
+
+                    _pendingTransactionCount = unsyncedStockTakeRecords?.Count ?? 0;
+
+                    Console.WriteLine($"HomePage: Found {_pendingTransactionCount} unsynced stock take records");
+
+                    // Update UI on main thread
+                    await MainThread.InvokeOnMainThreadAsync(() =>
+                    {
+                        HasPendingTransactions = _pendingTransactionCount > 0;
+
+                        if (HasPendingTransactions)
+                        {
+                            string transactionText = _pendingTransactionCount == 1
+                                ? "stock take waiting to sync"
+                                : "stock takes waiting to sync";
+                            PendingCountLabel.Text = $"{_pendingTransactionCount} {transactionText}";
+                        }
+
+                        // Force property changed notification
+                        OnPropertyChanged(nameof(HasPendingTransactions));
+                    });
                 }
-
-                // Force property changed notification
-                OnPropertyChanged(nameof(HasPendingTransactions));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading pending transactions: {ex.Message}");
-                Console.WriteLine(ex.StackTrace);
-            }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error loading pending transactions: {ex.Message}");
+                }
+            }).Wait(1000); // Wait up to 1 second for completion
         }
-
 
         private void Connectivity_ConnectivityChanged(object sender, ConnectivityChangedEventArgs e)
         {
@@ -141,54 +142,68 @@ namespace RenewitSalesforceApp.Views
                 bool previousOfflineMode = IsOfflineMode;
                 IsOfflineMode = e.NetworkAccess != NetworkAccess.Internet;
 
-                Console.WriteLine($"HomePage: Connectivity changed. Offline mode: {IsOfflineMode}");
+                Console.WriteLine($"HomePage: Connectivity changed. Was offline: {previousOfflineMode}, Now offline: {IsOfflineMode}");
 
                 // If we just came back online after being offline
                 if (previousOfflineMode && !IsOfflineMode)
                 {
                     Console.WriteLine("HomePage: Network restored after being offline");
 
-                    // Check if we have pending items FIRST
+                    // Reload pending transactions to get fresh count
                     LoadPendingTransactions();
 
                     if (HasPendingTransactions)
                     {
-                        Console.WriteLine($"HomePage: Found {_pendingTransactionCount} pending items, showing sync progress");
+                        Console.WriteLine($"HomePage: Found {_pendingTransactionCount} pending items after reconnection");
 
-                        // Show immediate UI feedback with spinner
-                        IsBusy = true;
+                        // Store the count before sync
+                        int countBeforeSync = _pendingTransactionCount;
 
-                        // Wait for background sync to complete with user feedback
-                        await Task.Delay(3000); // Give background sync time to work
-
-                        // Check results after background sync
-                        LoadPendingTransactions();
-
-                        if (!HasPendingTransactions)
+                        // Get SyncService and trigger sync
+                        var syncService = Application.Current?.Handler?.MauiContext?.Services.GetService<SyncService>();
+                        if (syncService != null)
                         {
-                            // Background sync worked!
-                            await DisplayAlert("Sync Complete",
-                                $"✅ Successfully synced {_pendingTransactionCount} stock take{(_pendingTransactionCount > 1 ? "s" : "")} to Salesforce!",
-                                "Great!");
-                        }
-                        else
-                        {
-                            // Still have pending - offer manual sync
-                            bool userWantsSync = await DisplayAlert("Manual Sync Needed",
-                                $"Found {_pendingTransactionCount} pending stock take{(_pendingTransactionCount > 1 ? "s" : "")}. Sync now?",
-                                "Sync Now", "Later");
+                            // Show immediate feedback
+                            IsBusy = true;
 
-                            if (userWantsSync)
+                            try
                             {
-                                await PerformManualSync("User requested sync after connectivity restored");
+                                // Trigger sync and wait for it to complete
+                                await syncService.TriggerSyncAsync();
+
+                                // Wait a bit for database updates
+                                await Task.Delay(2000);
+
+                                // Reload pending transactions to get updated count
+                                LoadPendingTransactions();
+
+                                // Calculate how many were synced
+                                int syncedCount = countBeforeSync - _pendingTransactionCount;
+
+                                // Ensure we're on the main thread for the alert
+                                if (syncedCount > 0)
+                                {
+                                    await DisplayAlert("Sync Complete",
+                                        $"✅ Successfully synced {syncedCount} stock take{(syncedCount > 1 ? "s" : "")} to Salesforce!",
+                                        "Great!");
+                                }
+                                else if (_pendingTransactionCount == 0 && countBeforeSync > 0)
+                                {
+                                    // All items were synced
+                                    await DisplayAlert("Sync Complete",
+                                        $"✅ All {countBeforeSync} stock take{(countBeforeSync > 1 ? "s" : "")} synced to Salesforce!",
+                                        "Great!");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"HomePage: Sync error: {ex.Message}");
+                            }
+                            finally
+                            {
+                                IsBusy = false;
                             }
                         }
-
-                        IsBusy = false;
-                    }
-                    else
-                    {
-                        Console.WriteLine("HomePage: No pending items found");
                     }
                 }
 
@@ -211,39 +226,77 @@ namespace RenewitSalesforceApp.Views
                 // Update the property to reflect current status
                 IsOfflineMode = currentNetworkStatus;
 
-                // IMPORTANT: Subscribe to connectivity changes
+                // Subscribe to connectivity changes
+                Connectivity.ConnectivityChanged -= Connectivity_ConnectivityChanged; // Unsubscribe first to avoid duplicates
                 Connectivity.ConnectivityChanged += Connectivity_ConnectivityChanged;
-                Console.WriteLine("HomePage re-subscribed to connectivity events");
+                Console.WriteLine("HomePage subscribed to connectivity events");
 
                 UpdateUserGreeting();
 
-                // Check for pending items immediately
+                // Load pending transactions
                 LoadPendingTransactions();
 
-                // If we're online and have pending items, show sync in progress
+                // Small delay to ensure everything is loaded
+                await Task.Delay(500);
+
+                // If we're online and have pending items, sync with UI feedback
                 if (!IsOfflineMode && HasPendingTransactions)
                 {
-                    Console.WriteLine($"HomePage: Online with {_pendingTransactionCount} pending items - showing sync progress");
-                    IsBusy = true;
+                    Console.WriteLine($"HomePage: Online with {_pendingTransactionCount} pending items on page load");
 
-                    // Wait for background sync
-                    await Task.Delay(4000);
+                    // Store count before sync
+                    int countBeforeSync = _pendingTransactionCount;
 
-                    // Check results
-                    int originalCount = _pendingTransactionCount;
-                    LoadPendingTransactions();
-
-                    if (!HasPendingTransactions)
+                    // Get SyncService from DI
+                    var syncService = Application.Current?.Handler?.MauiContext?.Services.GetService<SyncService>();
+                    if (syncService != null)
                     {
-                        await DisplayAlert("Auto-Sync Complete",
-                            $"✅ Successfully synced {originalCount} stock take{(originalCount > 1 ? "s" : "")} to Salesforce!",
-                            "Great!");
-                    }
+                        // Show loading indicator
+                        IsBusy = true;
 
-                    IsBusy = false;
+                        try
+                        {
+                            // Add a small delay to let UI settle
+                            await Task.Delay(1000);
+
+                            // Trigger sync and wait for completion
+                            await syncService.TriggerSyncAsync();
+
+                            // Wait for sync to complete
+                            await Task.Delay(2000);
+
+                            // Reload pending transactions
+                            LoadPendingTransactions();
+
+                            // Calculate synced count
+                            int syncedCount = countBeforeSync - _pendingTransactionCount;
+
+                            // Show feedback
+                            if (syncedCount > 0)
+                            {
+                                await DisplayAlert("Auto-Sync Complete",
+                                    $"✅ Successfully synced {syncedCount} stock take{(syncedCount > 1 ? "s" : "")} to Salesforce!",
+                                    "Great!");
+                            }
+                            else if (_pendingTransactionCount == 0 && countBeforeSync > 0)
+                            {
+                                await DisplayAlert("Auto-Sync Complete",
+                                    $"✅ All {countBeforeSync} pending stock take{(countBeforeSync > 1 ? "s" : "")} have been synced!",
+                                    "Great!");
+                            }
+                        }
+                        catch (Exception syncEx)
+                        {
+                            Console.WriteLine($"HomePage: Sync error on page load: {syncEx.Message}");
+                        }
+                        finally
+                        {
+                            IsBusy = false;
+                        }
+                    }
                 }
 
-                // Force a UI update for HasPendingTransactions
+                // Force a UI update
                 OnPropertyChanged(nameof(HasPendingTransactions));
 
                 Console.WriteLine("HomePage: Page loaded, pending transactions refreshed");

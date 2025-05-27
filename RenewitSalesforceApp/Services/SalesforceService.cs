@@ -457,7 +457,7 @@ namespace RenewitSalesforceApp.Services
                 // Ensure REFID is generated if not already set
                 if (string.IsNullOrEmpty(stockTakeRecord.REFID__c))
                 {
-                    stockTakeRecord.GenerateRefId();
+                    stockTakeRecord.GenerateRefId(DateTime.Now);
                 }
 
                 // Format GPS coordinates for Salesforce
