@@ -1,0 +1,262 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Renew-it Salesforce App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #3E4A6B 0%, #B91C3C 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            margin: 20px 0;
+        }
+
+        .logo-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 15px;
+            background: linear-gradient(45deg, #3E4A6B, #B91C3C);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+            .logo::before {
+                content: "";
+                width: 100px;
+                height: 100px;
+                background: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+        .button {
+            display: inline-block;
+            background: linear-gradient(45deg, #3E4A6B, #B91C3C);
+            color: white;
+            padding: 15px 30px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+            .button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+            }
+
+        h1 {
+            color: #3E4A6B;
+            border-bottom: 3px solid #B91C3C;
+            padding-bottom: 10px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #3E4A6B;
+            margin-top: 30px;
+        }
+
+        .version-info {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-left: 4px solid #3E4A6B;
+            padding: 15px 20px;
+            margin-top: 25px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .feature-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #B91C3C;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .status-online {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .status-offline {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 20px;
+            }
+
+            .feature-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <div class="logo"></div>
+            <h1>Renew-it Salesforce App</h1>
+            <p style="font-size: 18px; color: #6c757d; margin: 0;">Vehicle Stock Take & Management</p>
+        </div>
+
+        <p style="text-align: center; font-size: 16px; margin-bottom: 30px;">
+            The official mobile app for Renew-it vehicle stock takes and Salesforce integration.
+        </p>
+
+        <div style="text-align: center;">
+            <a href="#" id="downloadButton" class="button">📱 Download Latest Version</a>
+        </div>
+
+        <h2>🚀 Key Features</h2>
+        <div class="feature-list">
+            <div class="feature-item">
+                <strong>📸 Photo Capture</strong><br>
+                Take multiple photos per stock take with built-in camera
+            </div>
+            <div class="feature-item">
+                <strong>📱 Barcode Scanner</strong><br>
+                Scan license disk barcodes to auto-populate vehicle details
+            </div>
+            <div class="feature-item">
+                <strong>📍 GPS Location</strong><br>
+                Automatic GPS coordinates for accurate vehicle tracking
+            </div>
+            <div class="feature-item">
+                <strong>🔄 Offline Support</strong><br>
+                Work offline and sync when connectivity is restored
+            </div>
+            <div class="feature-item">
+                <strong>☁️ Salesforce Integration</strong><br>
+                Direct sync with Salesforce for seamless data management
+            </div>
+            <div class="feature-item">
+                <strong>🎨 Modern Interface</strong><br>
+                Clean, intuitive design with dark/light mode support
+            </div>
+        </div>
+
+        <h2>📲 Installation Instructions</h2>
+        <ol style="font-size: 16px;">
+            <li>Tap the download button above on your Android device</li>
+            <li>When the download completes, tap on the APK file</li>
+            <li>If prompted, enable installation from unknown sources in your device settings</li>
+            <li>Tap "Install" and wait for the installation to complete</li>
+            <li>Tap "Open" to launch the app and start using it</li>
+        </ol>
+
+        <h2>📋 System Requirements</h2>
+        <ul style="font-size: 16px;">
+            <li><strong>Android 7.0</strong> or higher</li>
+            <li><strong>Internet connection</strong> for syncing with Salesforce</li>
+            <li><strong>Camera access</strong> for photo capture and barcode scanning</li>
+            <li><strong>Location services</strong> for GPS coordinates</li>
+            <li><strong>Storage permission</strong> for saving photos locally</li>
+        </ul>
+
+        <div class="version-info">
+            <p><strong>Current Version:</strong> <span id="version">1.0.0</span> <span id="statusBadge" class="status-badge status-online">● Online</span></p>
+            <p><strong>Last Updated:</strong> <span id="date">May 27, 2025</span></p>
+            <p><strong>What's New:</strong> <br><span id="notes">Initial release with camera, barcode scanning, and Salesforce integration</span></p>
+        </div>
+
+        <div class="footer">
+            <p>© 2025 Renew-it. All rights reserved.</p>
+            <p style="margin-top: 10px;">
+                <small>This app is designed specifically for Renew-it vehicle stock take operations.</small>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Fetch and display the latest version info
+        fetch('version.json?' + new Date().getTime())
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('version').textContent =
+                    data.version + ' (Build ' + data.buildNumber + ')';
+
+                const releaseDate = new Date(data.releaseDate);
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                document.getElementById('date').textContent =
+                    releaseDate.toLocaleDateString('en-US', options);
+
+                document.getElementById('notes').textContent = data.notes;
+
+                document.getElementById('downloadButton').href = data.downloadUrl;
+
+                // Update status badge based on version availability
+                const statusBadge = document.getElementById('statusBadge');
+                statusBadge.textContent = '● Latest Version';
+                statusBadge.className = 'status-badge status-online';
+            })
+            .catch(error => {
+                console.error('Error fetching version:', error);
+                // Show offline status if version.json can't be loaded
+                const statusBadge = document.getElementById('statusBadge');
+                statusBadge.textContent = '● Offline';
+                statusBadge.className = 'status-badge status-offline';
+            });
+    </script>
+</body>
+</html>

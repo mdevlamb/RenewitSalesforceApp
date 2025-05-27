@@ -1,7 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="za.co.renewit.salesforceapp">
 
-	<!-- Permissions should be at this level -->
+	<!-- ADD THIS QUERIES SECTION -->
+	<queries>
+		<intent>
+			<action android:name="android.media.action.IMAGE_CAPTURE" />
+		</intent>
+	</queries>
+
+	<!-- Your existing permissions -->
 	<uses-permission android:name="android.permission.INTERNET" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.VIBRATE" />
@@ -9,16 +16,17 @@
 	<uses-permission android:name="android.permission.CAMERA" />
 	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+	<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+	<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+	<uses-permission android:name="android.permission.FLASHLIGHT" />
 
-	<!-- Single application element with all properties -->
-	<application
-		android:allowBackup="true"
-		android:enableOnBackInvokedCallback="true"
-		android:icon="@mipmap/appicon"
-		android:supportsRtl="true"
-		android:label="Renew-it Salesforce App">
+	<!-- Your existing features -->
+	<uses-feature android:name="android.hardware.camera" android:required="true" />
+	<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+	<uses-feature android:name="android.hardware.camera.flash" android:required="false" />
 
-		<!-- Your existing application content goes here -->
-
+	<!-- Keep your application simple -->
+	<application android:allowBackup="true" android:enableOnBackInvokedCallback="true" android:icon="@mipmap/appicon" android:supportsRtl="true" android:label="Renew-it Salesforce App">
+		<!-- Remove the provider for now -->
 	</application>
 </manifest>

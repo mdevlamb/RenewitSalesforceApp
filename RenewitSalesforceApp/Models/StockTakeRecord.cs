@@ -89,8 +89,10 @@ namespace RenewitSalesforceApp.Models
         /// </summary>
         public void SetStockTakeDate(DateTime dateTime)
         {
-            LocalStockTakeDate = dateTime;
-            Stock_Take_Date__c = dateTime.ToString("yyyy-MM-dd"); // SF Date format
+            // Use South Africa timezone
+            var southAfricaTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(dateTime, "South Africa Standard Time");
+            Stock_Take_Date__c = southAfricaTime.ToString("yyyy-MM-dd");
+            Console.WriteLine($"[StockTakeRecord] Set Stock Take Date: {Stock_Take_Date__c} at {southAfricaTime}");
         }
 
         /// <summary>
@@ -107,7 +109,10 @@ namespace RenewitSalesforceApp.Models
         /// </summary>
         public void GenerateRefId()
         {
-            REFID__c = DateTime.Now.ToString("yyyyMMddHHmmss");
+            // Use South Africa timezone for consistent timestamps
+            var southAfricaTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.Now, "South Africa Standard Time");
+            REFID__c = southAfricaTime.ToString("yyyyMMddHHmmss");
+            Console.WriteLine($"[StockTakeRecord] Generated REFID: {REFID__c} at {southAfricaTime}");
         }
 
         // Helper properties
@@ -160,14 +165,13 @@ namespace RenewitSalesforceApp.Models
         public const string PolishBay = "Polish Bay";
         public const string WheelAlignment = "Wheel Alignment";
         public const string WashBay = "Wash Bay";
-        public const string NotYetAllocated = "NOT YET ALLOCATED";
         public const string Prepbay = "Prepbay";
 
         public static readonly string[] All = {
             Topyard, InsurerYard, Ready, AwaitingPanel, Assembly,
             PanelBeating, PrepBay, Paintshop, Loading, Mechanical,
             FinnishingBay, SprayBooth, QualityInspection, PolishBay,
-            WheelAlignment, WashBay, NotYetAllocated, Prepbay
+            WheelAlignment, WashBay, Prepbay
         };
     }
 }

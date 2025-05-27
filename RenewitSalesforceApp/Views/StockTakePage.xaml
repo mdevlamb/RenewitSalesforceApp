@@ -371,8 +371,13 @@
                                    CornerRadius="8"
                                    HeightRequest="120"
                                    IsVisible="False">
+                                <Frame.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnViewPhotosClicked"/>
+                                </Frame.GestureRecognizers>
                                 <Grid>
                                     <Image x:Name="PhotoPreview" Aspect="AspectFit"/>
+
+                                    <!-- Photo Count Badge -->
                                     <Frame BackgroundColor="Black"
                                            CornerRadius="10"
                                            Padding="8,4"
@@ -385,6 +390,39 @@
                                                TextColor="White"
                                                FontSize="12"/>
                                     </Frame>
+
+                                    <!-- Delete Button -->
+                                    <Button x:Name="DeletePhotoButton"
+                                            Text="&#xe5cd;"
+                                            FontFamily="MaterialIcons"
+                                            FontSize="16"
+                                            TextColor="White"
+                                            BackgroundColor="#dc3545"
+                                            CornerRadius="15"
+                                            WidthRequest="30"
+                                            HeightRequest="30"
+                                            Padding="0"
+                                            HorizontalOptions="Start"
+                                            VerticalOptions="Start"
+                                            Margin="10"
+                                            Clicked="OnDeletePhotoClicked"/>
+
+                                    <!-- View All Photos Button (when multiple photos) -->
+                                    <Button x:Name="ViewAllPhotosButton"
+                                            Text="&#xe8f4;"
+                                            FontFamily="MaterialIcons"
+                                            FontSize="16"
+                                            TextColor="White"
+                                            BackgroundColor="#007AFF"
+                                            CornerRadius="15"
+                                            WidthRequest="30"
+                                            HeightRequest="30"
+                                            Padding="0"
+                                            HorizontalOptions="Center"
+                                            VerticalOptions="Start"
+                                            Margin="0,10,0,0"
+                                            IsVisible="False"
+                                            Clicked="OnViewPhotosClicked"/>
                                 </Grid>
                             </Frame>
 

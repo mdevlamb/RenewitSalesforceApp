@@ -1,0 +1,8 @@
+{
+    "version": "1.0.0",
+    "buildNumber": 1,
+    "notes": "Initial release with camera photo capture, barcode scanning, GPS location tracking, offline support, and Salesforce integration for vehicle stock takes.",
+    "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0.0-1/RenewitSalesforceApp-v1.0.0-1.apk",
+    "required": false,
+    "releaseDate": "2025-05-27T10:00:00"
+}

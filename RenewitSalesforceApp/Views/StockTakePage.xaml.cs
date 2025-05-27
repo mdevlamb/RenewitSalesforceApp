@@ -1,4 +1,4 @@
-using Microsoft.Maui;
+ï»¿using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Networking;
 using RenewitSalesforceApp.Models;
@@ -23,6 +23,9 @@ namespace RenewitSalesforceApp.Views
         private List<string> _photoPaths = new List<string>();
         private Location _currentLocation;
         private bool _isOfflineMode;
+
+        private static readonly SemaphoreSlim _cameraSemaphore = new SemaphoreSlim(1, 1);
+        private CameraBarcodeReaderView _currentBarcodeReader;
 
         public bool IsOfflineMode
         {
@@ -188,9 +191,15 @@ namespace RenewitSalesforceApp.Views
             }
         }
 
-        // Barcode scanning method using TaskCompletionSource pattern
         private async void OnLicenseDiskScanClicked(object sender, EventArgs e)
         {
+            // Wait for camera to be available
+            if (!await _cameraSemaphore.WaitAsync(5000))
+            {
+                await DisplayAlert("Camera Busy", "Camera is currently in use. Please wait and try again.", "OK");
+                return;
+            }
+
             try
             {
                 Console.WriteLine("[StockTakePage] License disk scan button clicked");
@@ -207,6 +216,9 @@ namespace RenewitSalesforceApp.Views
                     }
                 }
 
+                // Add delay to ensure camera is fully available
+                await Task.Delay(500);
+
                 var barcodeReader = new CameraBarcodeReaderView
                 {
                     Options = new BarcodeReaderOptions
@@ -216,6 +228,9 @@ namespace RenewitSalesforceApp.Views
                         Multiple = false
                     }
                 };
+
+                // Store reference to current barcode reader
+                _currentBarcodeReader = barcodeReader;
 
                 var tcs = new TaskCompletionSource<string>();
                 bool hasScanned = false; // Prevent multiple scans
@@ -254,15 +269,39 @@ namespace RenewitSalesforceApp.Views
                     }
                 };
 
+                // Create scanning overlay with focus guidelines
+                var scanningOverlay = CreateScanningOverlay();
+
+                var cameraFrame = new Frame
+                {
+                    Content = new Grid
+                    {
+                        Children =
+                    {
+                        barcodeReader,
+                        scanningOverlay
+                    }
+                    },
+                    Padding = new Thickness(0),
+                    CornerRadius = 6,           // Reduced from 20 to 6
+                    IsClippedToBounds = true,
+                    HeightRequest = 500,
+                    WidthRequest = 380,
+                    HorizontalOptions = LayoutOptions.Center,
+                    BorderColor = Color.FromArgb("#007AFF"),
+                    HasShadow = true
+                };
+
                 var cancelButton = new Button
                 {
                     Text = "Cancel",
                     HorizontalOptions = LayoutOptions.Center,
-                    Margin = new Thickness(0, 15, 0, 0),
+                    Margin = new Thickness(0, 20, 0, 0),
                     BackgroundColor = Color.FromArgb("#6c757d"),
                     TextColor = Colors.White,
                     CornerRadius = 8,
-                    Padding = new Thickness(30, 10)
+                    Padding = new Thickness(40, 12),
+                    FontSize = 16
                 };
 
                 cancelButton.Clicked += (s, e) =>
@@ -271,43 +310,42 @@ namespace RenewitSalesforceApp.Views
                     tcs.TrySetResult(null);
                 };
 
-                // Scanning window with instructions
+                // Enhanced scanning UI
                 var stackLayout = new VerticalStackLayout
                 {
-                    Padding = new Thickness(15),
-                    Spacing = 15,
+                    Padding = new Thickness(20),
+                    Spacing = 20,
                     Children =
-                    {
-                        new Label
-                        {
-                            Text = "Scan License Disk Barcode",
-                            FontAttributes = FontAttributes.Bold,
-                            FontSize = 18,
-                            HorizontalOptions = LayoutOptions.Center,
-                            TextColor = Application.Current.RequestedTheme == AppTheme.Dark ? Colors.White : Colors.Black
-                        },
-                        new Label
-                        {
-                            Text = "Position the barcode within the frame",
-                            FontSize = 14,
-                            HorizontalOptions = LayoutOptions.Center,
-                            TextColor = Application.Current.RequestedTheme == AppTheme.Dark ? Color.FromArgb("#aaaaaa") : Color.FromArgb("#666666"),
-                            Margin = new Thickness(0, 0, 0, 10)
-                        },
-                        new Frame
-                        {
-                            Content = barcodeReader,
-                            Padding = new Thickness(0),
-                            CornerRadius = 15,
-                            IsClippedToBounds = true,
-                            HeightRequest = 400,
-                            WidthRequest = 350,
-                            HorizontalOptions = LayoutOptions.Center,
-                            BorderColor = Color.FromArgb("#007AFF"),
-                            HasShadow = true
-                        },
-                        cancelButton
-                    }
+            {
+                new Label
+                {
+                    Text = "Scan License Disk Barcode",
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 22,
+                    HorizontalOptions = LayoutOptions.Center,
+                    TextColor = Application.Current.RequestedTheme == AppTheme.Dark ? Colors.White : Colors.Black,
+                    Margin = new Thickness(0, 10, 0, 0)
+                },
+                new Label
+                {
+                    Text = "Position the barcode within the green frame\nAlign the barcode horizontally for best results",
+                    FontSize = 14,
+                    HorizontalOptions = LayoutOptions.Center,
+                    HorizontalTextAlignment = TextAlignment.Center,
+                    TextColor = Application.Current.RequestedTheme == AppTheme.Dark ? Color.FromArgb("#aaaaaa") : Color.FromArgb("#666666"),
+                    Margin = new Thickness(0, 0, 0, 5)
+                },
+                cameraFrame,
+                new Label
+                {
+                    Text = "ðŸ’¡ Hold steady and ensure good lighting",
+                    FontSize = 12,
+                    HorizontalOptions = LayoutOptions.Center,
+                    TextColor = Color.FromArgb("#FF9800"),
+                    FontAttributes = FontAttributes.Italic
+                },
+                cancelButton
+            }
                 };
 
                 var scanPage = new ContentPage
@@ -344,6 +382,161 @@ namespace RenewitSalesforceApp.Views
                 Console.WriteLine($"[StockTakePage] Error in license disk scan: {ex.Message}");
                 await DisplayAlert("Error", "Failed to scan barcode", "OK");
             }
+            finally
+            {
+                // Clean up barcode reader reference
+                _currentBarcodeReader = null;
+
+                // Add delay before releasing semaphore to ensure camera is fully released
+                await Task.Delay(1000);
+                _cameraSemaphore.Release();
+                Console.WriteLine("[StockTakePage] Barcode scanner released camera resources");
+            }
+        }
+
+        private Grid CreateScanningOverlay()
+        {
+            var overlay = new Grid
+            {
+                InputTransparent = true, // Allow touches to pass through
+                BackgroundColor = Colors.Transparent,
+                RowDefinitions =
+        {
+            new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }, // Top
+            new RowDefinition { Height = new GridLength(120) },                  // Scan area (increased)
+            new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }  // Bottom
+        }
+            };
+
+            // Top semi-transparent overlay
+            var topOverlay = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#80000000") // Semi-transparent black
+            };
+            overlay.Add(topOverlay, 0, 0);
+
+            // Bottom semi-transparent overlay
+            var bottomOverlay = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#80000000") // Semi-transparent black
+            };
+            overlay.Add(bottomOverlay, 0, 2);
+
+            // Clear scanning area in the middle (row 1) - NO GREEN BORDER FRAME
+            var scanningAreaContainer = new Grid
+            {
+                BackgroundColor = Colors.Transparent,
+                Margin = new Thickness(30, 0) // Reduced side margins for wider area
+            };
+
+            // Add corner guides to the scanning area (no border frame)
+            AddCornerGuides(scanningAreaContainer);
+
+            overlay.Add(scanningAreaContainer, 0, 1);
+
+            return overlay;
+        }
+
+        private void AddCornerGuides(Grid container)
+        {
+            // Corner guide parameters - wider scanning area
+            var cornerSize = 30;        // Longer corner lines
+            var cornerThickness = 4;    // Thicker lines
+            var cornerOffset = 15;      // Further from edges for wider area
+
+            // Top-left corner
+            var topLeftH = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerSize,
+                HeightRequest = cornerThickness,
+                HorizontalOptions = LayoutOptions.Start,
+                VerticalOptions = LayoutOptions.Start,
+                Margin = new Thickness(cornerOffset, cornerOffset, 0, 0)
+            };
+
+            var topLeftV = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerThickness,
+                HeightRequest = cornerSize,
+                HorizontalOptions = LayoutOptions.Start,
+                VerticalOptions = LayoutOptions.Start,
+                Margin = new Thickness(cornerOffset, cornerOffset, 0, 0)
+            };
+
+            // Top-right corner
+            var topRightH = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerSize,
+                HeightRequest = cornerThickness,
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.Start,
+                Margin = new Thickness(0, cornerOffset, cornerOffset, 0)
+            };
+
+            var topRightV = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerThickness,
+                HeightRequest = cornerSize,
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.Start,
+                Margin = new Thickness(0, cornerOffset, cornerOffset, 0)
+            };
+
+            // Bottom-left corner
+            var bottomLeftH = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerSize,
+                HeightRequest = cornerThickness,
+                HorizontalOptions = LayoutOptions.Start,
+                VerticalOptions = LayoutOptions.End,
+                Margin = new Thickness(cornerOffset, 0, 0, cornerOffset)
+            };
+
+            var bottomLeftV = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerThickness,
+                HeightRequest = cornerSize,
+                HorizontalOptions = LayoutOptions.Start,
+                VerticalOptions = LayoutOptions.End,
+                Margin = new Thickness(cornerOffset, 0, 0, cornerOffset)
+            };
+
+            // Bottom-right corner
+            var bottomRightH = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerSize,
+                HeightRequest = cornerThickness,
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.End,
+                Margin = new Thickness(0, 0, cornerOffset, cornerOffset)
+            };
+
+            var bottomRightV = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#00FF00"),
+                WidthRequest = cornerThickness,
+                HeightRequest = cornerSize,
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.End,
+                Margin = new Thickness(0, 0, cornerOffset, cornerOffset)
+            };
+
+            // Add all corner pieces
+            container.Children.Add(topLeftH);
+            container.Children.Add(topLeftV);
+            container.Children.Add(topRightH);
+            container.Children.Add(topRightV);
+            container.Children.Add(bottomLeftH);
+            container.Children.Add(bottomLeftV);
+            container.Children.Add(bottomRightH);
+            container.Children.Add(bottomRightV);
         }
 
         // Helper method for scan success sound
@@ -605,26 +798,570 @@ namespace RenewitSalesforceApp.Views
 
         private async void OnTakePhotoClicked(object sender, EventArgs e)
         {
+            // Wait for camera to be available
+            if (!await _cameraSemaphore.WaitAsync(5000))
+            {
+                await DisplayAlert("Camera Busy", "Camera is currently in use. Please wait and try again.", "OK");
+                return;
+            }
+
             try
             {
                 Console.WriteLine("[StockTakePage] Take photo button clicked");
 
-                // TODO: Implement camera functionality
-                await DisplayAlert(
-                    "Camera",
-                    "Camera functionality will be implemented here.\n\nThis will:\n• Take photos using device camera\n• Save photos locally\n• Show photo previews\n• Allow multiple photos per stock take",
-                    "OK");
+                // Check camera permission first
+                var cameraStatus = await Permissions.CheckStatusAsync<Permissions.Camera>();
+                if (cameraStatus != PermissionStatus.Granted)
+                {
+                    Console.WriteLine("[StockTakePage] Camera permission not granted, requesting...");
+                    cameraStatus = await Permissions.RequestAsync<Permissions.Camera>();
+                    if (cameraStatus != PermissionStatus.Granted)
+                    {
+                        Console.WriteLine("[StockTakePage] Camera permission denied by user");
+                        await DisplayAlert("Camera Permission", "Camera permission is required to take photos.", "OK");
+                        return;
+                    }
+                }
 
-                // Simulate taking a photo for UI testing
-                PhotoFrame.IsVisible = true;
-                NoPhotoFrame.IsVisible = false;
-                _photoPaths.Add("simulated_photo_path.jpg");
-                PhotoCountLabel.Text = $"{_photoPaths.Count} photo{(_photoPaths.Count > 1 ? "s" : "")}";
+                // Check if camera is available
+                if (!MediaPicker.Default.IsCaptureSupported)
+                {
+                    Console.WriteLine("[StockTakePage] Camera capture not supported on this device");
+                    await DisplayAlert("Camera Not Available", "Camera is not available on this device.", "OK");
+                    return;
+                }
+
+                // Show loading overlay
+                FullScreenLoadingOverlay.IsVisible = true;
+                Console.WriteLine("[StockTakePage] Starting camera capture...");
+
+                // Add delay to ensure camera is fully released from previous operations
+                await Task.Delay(500);
+
+                FileResult photo = null;
+
+                try
+                {
+                    // Configure photo options
+                    var photoOptions = new MediaPickerOptions
+                    {
+                        Title = "Stock Take Photo"
+                    };
+
+                    // Take the photo with specific error handling
+                    photo = await MediaPicker.Default.CapturePhotoAsync(photoOptions);
+                }
+                catch (FeatureNotSupportedException ex)
+                {
+                    Console.WriteLine($"[StockTakePage] Camera feature not supported: {ex.Message}");
+                    await DisplayAlert("Feature Not Supported",
+                        "Camera capture is not supported on this device.", "OK");
+                    return;
+                }
+                catch (PermissionException ex)
+                {
+                    Console.WriteLine($"[StockTakePage] Camera permission exception: {ex.Message}");
+                    await DisplayAlert("Permission Required",
+                        "Camera permission is required. Please enable it in your device settings.", "OK");
+                    return;
+                }
+                catch (NotSupportedException ex)
+                {
+                    Console.WriteLine($"[StockTakePage] Camera not supported: {ex.Message}");
+                    await DisplayAlert("Camera Not Supported",
+                        "Camera functionality is not supported on this device.", "OK");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[StockTakePage] Camera capture failed: {ex.Message}");
+                    Console.WriteLine($"[StockTakePage] Exception type: {ex.GetType().Name}");
+
+                    // Specific error messages for camera conflicts
+                    string errorMessage;
+                    if (ex.Message.Contains("camera") && ex.Message.Contains("use"))
+                    {
+                        errorMessage = "Camera is busy with another operation. Please wait a moment and try again.";
+                    }
+                    else if (ex.Message.Contains("IMAGE_CAPTURE"))
+                    {
+                        errorMessage = "Camera app configuration issue. Please check if a camera app is installed.";
+                    }
+                    else if (ex.Message.Contains("FileProvider") || ex.Message.Contains("fileprovider"))
+                    {
+                        errorMessage = "Camera storage configuration issue. Please contact support.";
+                    }
+                    else if (ex.Message.Contains("permission"))
+                    {
+                        errorMessage = "Camera permission issue. Please enable camera access in settings.";
+                    }
+                    else
+                    {
+                        errorMessage = "Failed to access camera. Please try again or restart the app.";
+                    }
+
+                    await DisplayAlert("Camera Error", errorMessage, "OK");
+                    return;
+                }
+
+                if (photo != null)
+                {
+                    Console.WriteLine($"[StockTakePage] Photo captured successfully: {photo.FileName}");
+
+                    try
+                    {
+                        // Create a unique filename with timestamp
+                        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                        string vehicleReg = VehicleRegEntry.Text?.Replace(" ", "").Replace("/", "") ?? "Unknown";
+                        string fileName = $"StockTake_{vehicleReg}_{timestamp}_{_photoPaths.Count + 1}.jpg";
+
+                        // Get the app's local data directory
+                        string localAppData = FileSystem.AppDataDirectory;
+                        string photosFolder = Path.Combine(localAppData, "StockTakePhotos");
+
+                        // Create photos directory if it doesn't exist
+                        Directory.CreateDirectory(photosFolder);
+                        Console.WriteLine($"[StockTakePage] Photos directory: {photosFolder}");
+
+                        // Full path for the saved photo
+                        string localFilePath = Path.Combine(photosFolder, fileName);
+
+                        // Copy the photo to our app's directory
+                        using (var sourceStream = await photo.OpenReadAsync())
+                        using (var localFileStream = File.Create(localFilePath))
+                        {
+                            await sourceStream.CopyToAsync(localFileStream);
+                        }
+
+                        // Verify file was saved
+                        if (File.Exists(localFilePath))
+                        {
+                            var fileInfo = new FileInfo(localFilePath);
+                            Console.WriteLine($"[StockTakePage] Photo saved successfully: {localFilePath} ({fileInfo.Length} bytes)");
+
+                            // Add to our photo paths list
+                            _photoPaths.Add(localFilePath);
+
+                            // Update UI
+                            await UpdatePhotoDisplay();
+
+                            // Show success message
+                            await DisplayAlert("Photo Taken",
+                                $"Photo {_photoPaths.Count} captured and saved successfully!",
+                                "Great!");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[StockTakePage] Error: Photo file was not created at {localFilePath}");
+                            await DisplayAlert("Save Error", "Photo was taken but could not be saved.", "OK");
+                        }
+                    }
+                    catch (Exception saveEx)
+                    {
+                        Console.WriteLine($"[StockTakePage] Error saving photo: {saveEx.Message}");
+                        await DisplayAlert("Save Error",
+                            $"Photo was taken but could not be saved: {saveEx.Message}", "OK");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[StockTakePage] Photo capture was cancelled by user");
+                    // Don't show an alert for user cancellation - it's expected behavior
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StockTakePage] Error taking photo: {ex.Message}");
-                await DisplayAlert("Camera Error", "Could not take photo", "OK");
+                Console.WriteLine($"[StockTakePage] Unexpected error in photo capture: {ex.Message}");
+                Console.WriteLine($"[StockTakePage] Stack trace: {ex.StackTrace}");
+                await DisplayAlert("Unexpected Error",
+                    $"An unexpected error occurred: {ex.Message}",
+                    "OK");
+            }
+            finally
+            {
+                // Always hide loading overlay and release camera semaphore
+                FullScreenLoadingOverlay.IsVisible = false;
+                Console.WriteLine("[StockTakePage] Photo capture process completed");
+
+                // Add delay before releasing semaphore to ensure camera is fully released
+                await Task.Delay(1000);
+                _cameraSemaphore.Release();
+            }
+        }
+
+        private async Task UpdatePhotoDisplay()
+        {
+            try
+            {
+                if (_photoPaths.Count > 0)
+                {
+                    // Show photo frame and hide no-photo frame
+                    PhotoFrame.IsVisible = true;
+                    NoPhotoFrame.IsVisible = false;
+
+                    // Update photo count
+                    PhotoCountLabel.Text = $"{_photoPaths.Count} photo{(_photoPaths.Count > 1 ? "s" : "")}";
+
+                    // Show/hide view all button based on photo count
+                    ViewAllPhotosButton.IsVisible = _photoPaths.Count > 1;
+
+                    // Load and display the most recent photo as thumbnail
+                    string latestPhotoPath = _photoPaths[_photoPaths.Count - 1];
+
+                    if (File.Exists(latestPhotoPath))
+                    {
+                        // Load the image for display using the PhotoPreview Image control
+                        var imageSource = ImageSource.FromFile(latestPhotoPath);
+                        PhotoPreview.Source = imageSource;
+
+                        Console.WriteLine($"[StockTakePage] Updated photo display with {_photoPaths.Count} photos");
+                    }
+                }
+                else
+                {
+                    // No photos - show no-photo frame
+                    PhotoFrame.IsVisible = false;
+                    NoPhotoFrame.IsVisible = true;
+                    PhotoCountLabel.Text = "No photos";
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error updating photo display: {ex.Message}");
+            }
+        }
+
+        private async void OnViewPhotosClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_photoPaths.Count == 0)
+                {
+                    await DisplayAlert("No Photos", "No photos have been taken yet.", "OK");
+                    return;
+                }
+
+                // Create a simple photo selection dialog
+                var actions = new List<string>();
+                for (int i = 0; i < _photoPaths.Count; i++)
+                {
+                    actions.Add($"View Photo {i + 1}");
+                }
+                actions.Add("Delete All Photos");
+
+                string action = await DisplayActionSheet(
+                    $"Photos ({_photoPaths.Count})",
+                    "Cancel",
+                    null,
+                    actions.ToArray());
+
+                if (action == "Delete All Photos")
+                {
+                    bool confirm = await DisplayAlert("Delete All Photos",
+                        $"Are you sure you want to delete all {_photoPaths.Count} photos?",
+                        "Delete", "Cancel");
+
+                    if (confirm)
+                    {
+                        await DeleteAllPhotos();
+                    }
+                }
+                else if (action != null && action.StartsWith("View Photo"))
+                {
+                    // Extract photo number
+                    if (int.TryParse(action.Replace("View Photo ", ""), out int photoNum) &&
+                        photoNum <= _photoPaths.Count)
+                    {
+                        await ShowPhotoViewer(photoNum - 1);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error viewing photos: {ex.Message}");
+                await DisplayAlert("Error", "Could not view photos", "OK");
+            }
+        }
+
+        private async Task ShowPhotoViewer(int photoIndex)
+        {
+            try
+            {
+                if (photoIndex >= 0 && photoIndex < _photoPaths.Count)
+                {
+                    string photoPath = _photoPaths[photoIndex];
+                    string fileName = Path.GetFileName(photoPath);
+
+                    if (!File.Exists(photoPath))
+                    {
+                        await DisplayAlert("Photo Not Found", "The photo file could not be found.", "OK");
+                        return;
+                    }
+
+                    // Create a proper photo viewer page
+                    var photoImage = new Image
+                    {
+                        Source = ImageSource.FromFile(photoPath),
+                        Aspect = Aspect.AspectFit,
+                        BackgroundColor = Colors.Black,
+                        HorizontalOptions = LayoutOptions.FillAndExpand,
+                        VerticalOptions = LayoutOptions.FillAndExpand
+                    };
+
+                    var deleteButton = new Button
+                    {
+                        Text = "Delete This Photo",
+                        BackgroundColor = Color.FromArgb("#dc3545"),
+                        TextColor = Colors.White,
+                        CornerRadius = 8,
+                        Margin = new Thickness(20, 10),
+                        HorizontalOptions = LayoutOptions.Center
+                    };
+
+                    var closeButton = new Button
+                    {
+                        Text = "Close",
+                        BackgroundColor = Color.FromArgb("#6c757d"),
+                        TextColor = Colors.White,
+                        CornerRadius = 8,
+                        Margin = new Thickness(20, 10),
+                        HorizontalOptions = LayoutOptions.Center
+                    };
+
+                    var infoLabel = new Label
+                    {
+                        Text = $"Photo {photoIndex + 1} of {_photoPaths.Count}\n{fileName}",
+                        TextColor = Colors.White,
+                        FontSize = 14,
+                        HorizontalOptions = LayoutOptions.Center,
+                        HorizontalTextAlignment = TextAlignment.Center,
+                        Margin = new Thickness(20, 10)
+                    };
+
+                    var buttonStack = new HorizontalStackLayout
+                    {
+                        HorizontalOptions = LayoutOptions.Center,
+                        Spacing = 15,
+                        Children = { deleteButton, closeButton }
+                    };
+
+                    var content = new StackLayout
+                    {
+                        BackgroundColor = Colors.Black,
+                        Children =
+                {
+                    new StackLayout
+                    {
+                        VerticalOptions = LayoutOptions.FillAndExpand,
+                        Children = { photoImage }
+                    },
+                    infoLabel,
+                    buttonStack
+                }
+                    };
+
+                    var photoViewerPage = new ContentPage
+                    {
+                        Title = $"Photo {photoIndex + 1}",
+                        Content = content,
+                        BackgroundColor = Colors.Black
+                    };
+
+                    var tcs = new TaskCompletionSource<string>();
+
+                    deleteButton.Clicked += async (s, e) =>
+                    {
+                        bool confirm = await DisplayAlert("Delete Photo",
+                            "Are you sure you want to delete this photo?",
+                            "Delete", "Cancel");
+
+                        if (confirm)
+                        {
+                            tcs.SetResult("delete");
+                        }
+                    };
+
+                    closeButton.Clicked += (s, e) => tcs.SetResult("close");
+
+                    await Navigation.PushModalAsync(photoViewerPage);
+
+                    var result = await tcs.Task;
+
+                    await Navigation.PopModalAsync();
+
+                    if (result == "delete")
+                    {
+                        await DeleteSpecificPhoto(photoIndex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error showing photo: {ex.Message}");
+                await DisplayAlert("Error", "Could not display photo", "OK");
+            }
+        }
+
+        private async Task DeleteSpecificPhoto(int photoIndex)
+        {
+            try
+            {
+                if (photoIndex >= 0 && photoIndex < _photoPaths.Count)
+                {
+                    string photoToDelete = _photoPaths[photoIndex];
+
+                    Console.WriteLine($"[StockTakePage] Deleting photo: {photoToDelete}");
+
+                    // Delete physical file
+                    if (File.Exists(photoToDelete))
+                    {
+                        File.Delete(photoToDelete);
+                        Console.WriteLine($"[StockTakePage] Deleted photo file: {photoToDelete}");
+                    }
+
+                    // Remove from list
+                    _photoPaths.RemoveAt(photoIndex);
+
+                    // Update UI
+                    await UpdatePhotoDisplay();
+
+                    await DisplayAlert("Photo Deleted", "Photo has been deleted.", "OK");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error deleting photo: {ex.Message}");
+                await DisplayAlert("Error", "Could not delete photo", "OK");
+            }
+        }
+
+        private async void OnDeletePhotoClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_photoPaths.Count == 0)
+                {
+                    await DisplayAlert("No Photos", "No photos to delete.", "OK");
+                    return;
+                }
+
+                string action;
+                if (_photoPaths.Count == 1)
+                {
+                    // Only one photo - simple confirmation
+                    bool confirm = await DisplayAlert("Delete Photo",
+                        "Are you sure you want to delete this photo?",
+                        "Delete", "Cancel");
+
+                    if (!confirm) return;
+
+                    action = "Delete Current";
+                }
+                else
+                {
+                    // Multiple photos - give options
+                    action = await DisplayActionSheet(
+                        $"Delete Photos ({_photoPaths.Count} total)",
+                        "Cancel",
+                        null,
+                        "Delete Current Photo",
+                        "Delete All Photos");
+                }
+
+                if (action == "Delete Current" || action == "Delete Current Photo")
+                {
+                    await DeleteCurrentPhoto();
+                }
+                else if (action == "Delete All Photos")
+                {
+                    bool confirm = await DisplayAlert("Delete All Photos",
+                        $"Are you sure you want to delete all {_photoPaths.Count} photos?",
+                        "Delete All", "Cancel");
+
+                    if (confirm)
+                    {
+                        await DeleteAllPhotos();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error in delete photo: {ex.Message}");
+                await DisplayAlert("Error", "Could not delete photo", "OK");
+            }
+        }
+
+
+
+        private async Task DeleteAllPhotos()
+        {
+            try
+            {
+                Console.WriteLine("[StockTakePage] Deleting all photos");
+
+                // Delete physical files
+                foreach (string photoPath in _photoPaths)
+                {
+                    try
+                    {
+                        if (File.Exists(photoPath))
+                        {
+                            File.Delete(photoPath);
+                            Console.WriteLine($"[StockTakePage] Deleted photo: {photoPath}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[StockTakePage] Error deleting photo {photoPath}: {ex.Message}");
+                    }
+                }
+
+                // Clear the list
+                _photoPaths.Clear();
+
+                // Update UI
+                await UpdatePhotoDisplay();
+
+                await DisplayAlert("Photos Deleted", "All photos have been deleted.", "OK");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error deleting photos: {ex.Message}");
+                await DisplayAlert("Error", "Could not delete all photos", "OK");
+            }
+        }
+
+        private async Task DeleteCurrentPhoto()
+        {
+            try
+            {
+                if (_photoPaths.Count == 0) return;
+
+                // Delete the most recent photo (the one being displayed)
+                int lastIndex = _photoPaths.Count - 1;
+                string photoToDelete = _photoPaths[lastIndex];
+
+                Console.WriteLine($"[StockTakePage] Deleting current photo: {photoToDelete}");
+
+                // Delete physical file
+                if (File.Exists(photoToDelete))
+                {
+                    File.Delete(photoToDelete);
+                    Console.WriteLine($"[StockTakePage] Deleted photo file: {photoToDelete}");
+                }
+
+                // Remove from list
+                _photoPaths.RemoveAt(lastIndex);
+
+                // Update UI
+                await UpdatePhotoDisplay();
+
+                await DisplayAlert("Photo Deleted", "Photo has been deleted.", "OK");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error deleting current photo: {ex.Message}");
+                await DisplayAlert("Error", "Could not delete photo", "OK");
             }
         }
 
@@ -642,11 +1379,14 @@ namespace RenewitSalesforceApp.Views
                 SubmitButton.IsEnabled = false;
                 SubmitButton.Text = "Processing...";
 
+                // SHOW LOADING SPINNER
+                FullScreenLoadingOverlay.IsVisible = true;
+
                 // 1. Validate required data
                 if (!ValidateData())
                 {
                     await DisplayAlert("Incomplete Data",
-                        "Please fill in all required fields:\n• Vehicle Registration\n• Branch\n• Department",
+                        "Please fill in all required fields:\nâ€¢ Vehicle Registration\nâ€¢ Branch\nâ€¢ Department",
                         "OK");
                     return;
                 }
@@ -729,13 +1469,13 @@ namespace RenewitSalesforceApp.Views
                             {
                                 try
                                 {
-                                    // Note: You'd need to implement photo upload here or call a service method
                                     Console.WriteLine($"[StockTakePage] Uploading {_photoPaths.Count} photos to Salesforce");
-                                    // await UploadPhotosToSalesforceAsync(salesforceId, _photoPaths);
+                                    await UploadPhotosToSalesforceAsync(salesforceId, _photoPaths);
                                 }
                                 catch (Exception photoEx)
                                 {
                                     Console.WriteLine($"[StockTakePage] Photo upload failed: {photoEx.Message}");
+                                    // Don't fail the entire submission for photo upload issues
                                 }
                             }
                         }
@@ -797,9 +1537,63 @@ namespace RenewitSalesforceApp.Views
             }
             finally
             {
-                // Reset button
+                // HIDE LOADING SPINNER AND RESET BUTTON
+                FullScreenLoadingOverlay.IsVisible = false;
                 SubmitButton.Text = "Submit Stock Take";
                 SubmitButton.IsEnabled = true;
+            }
+        }
+
+        // ADD THIS METHOD FOR PHOTO UPLOAD
+        private async Task UploadPhotosToSalesforceAsync(string salesforceRecordId, List<string> photoPaths)
+        {
+            try
+            {
+                if (photoPaths == null || photoPaths.Count == 0) return;
+
+                Console.WriteLine($"[StockTakePage] Uploading {photoPaths.Count} photos to Salesforce record: {salesforceRecordId}");
+
+                for (int i = 0; i < photoPaths.Count; i++)
+                {
+                    string photoPath = photoPaths[i];
+                    if (File.Exists(photoPath))
+                    {
+                        try
+                        {
+                            Console.WriteLine($"[StockTakePage] Uploading photo {i + 1}/{photoPaths.Count}: {Path.GetFileName(photoPath)}");
+
+                            byte[] fileBytes = await File.ReadAllBytesAsync(photoPath);
+                            string fileName = Path.GetFileName(photoPath);
+
+                            // Add index to filename if multiple photos
+                            if (photoPaths.Count > 1)
+                            {
+                                string extension = Path.GetExtension(fileName);
+                                string nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+                                fileName = $"{nameWithoutExt}_{i + 1}{extension}";
+                            }
+
+                            // Upload using SalesforceService
+                            string fileId = await _salesforceService.UploadFileAsync(salesforceRecordId, fileName, fileBytes, "image/jpeg");
+                            Console.WriteLine($"[StockTakePage] Successfully uploaded photo {i + 1} with ID: {fileId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[StockTakePage] Error uploading photo {i + 1}: {ex.Message}");
+                            // Continue with other photos even if one fails
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[StockTakePage] Photo file not found: {photoPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error during photo upload: {ex.Message}");
+                // Don't throw - photos are optional, main record was saved successfully
+                throw; // Re-throw to let caller handle it
             }
         }
 
@@ -813,6 +1607,20 @@ namespace RenewitSalesforceApp.Views
                               DepartmentPicker.SelectedIndex >= 0;
 
             return hasVehicleReg && hasLocation;
+        }
+
+        private string GetSouthAfricaTimestamp()
+        {
+            try
+            {
+                var southAfricaTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.Now, "South Africa Standard Time");
+                return southAfricaTime.ToString("yyyyMMdd_HHmmss");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error getting SA time, using local: {ex.Message}");
+                return DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            }
         }
     }
 }

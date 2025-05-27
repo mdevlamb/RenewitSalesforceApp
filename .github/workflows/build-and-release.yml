@@ -1,0 +1,146 @@
+name: Build and Release RenewitSalesforceApp
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write      # Allows creating releases
+  packages: read       # If you need to read packages
+  actions: read        # For workflow access
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    
+    - name: Extract version info
+      id: version
+      shell: pwsh
+      run: |
+        # Get current version from csproj
+        $xml = [Xml] (Get-Content "./RenewitSalesforceApp/RenewitSalesforceApp.csproj")
+        $displayVersion = $xml.Project.PropertyGroup.ApplicationDisplayVersion
+        $buildNumber = [int]$xml.Project.PropertyGroup.ApplicationVersion
+        
+        # Increment build number
+        $newBuildNumber = $buildNumber + 1
+        
+        # Update csproj
+        $xml.Project.PropertyGroup.ApplicationVersion = $newBuildNumber.ToString()
+        $xml.Save("./RenewitSalesforceApp/RenewitSalesforceApp.csproj")
+        
+        # Set outputs
+        echo "VERSION=$displayVersion" >> $env:GITHUB_OUTPUT
+        echo "BUILD_NUMBER=$newBuildNumber" >> $env:GITHUB_OUTPUT
+        echo "TAG=v$displayVersion-$newBuildNumber" >> $env:GITHUB_OUTPUT
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Install MAUI workload
+      run: dotnet workload install maui
+    
+    - name: Decode keystore
+      id: decode_keystore
+      uses: timheuer/base64-to-file@v1
+      with:
+        fileName: 'renewit.keystore'
+        encodedString: ${{ secrets.KEYSTORE_BASE64 }}
+    
+    - name: Build Android App
+      shell: pwsh
+      run: |
+        dotnet publish RenewitSalesforceApp/RenewitSalesforceApp.csproj `
+          -f net8.0-android `
+          -c Release `
+          -p:AndroidKeyStore=true `
+          -p:AndroidSigningKeyStore=${{ steps.decode_keystore.outputs.filePath }} `
+          -p:AndroidSigningKeyAlias=${{ secrets.KEY_ALIAS }} `
+          -p:AndroidSigningKeyPass=${{ secrets.KEY_PASSWORD }} `
+          -p:AndroidSigningStorePass=${{ secrets.KEYSTORE_PASSWORD }}
+    
+    - name: Generate release notes
+      id: release_notes
+      shell: pwsh
+      run: |
+        # Get commits since last tag
+        $commits = $(git log --pretty=format:"- %s" -10)
+        $notes = $commits -join "`n"
+        
+        # Escape newlines for GitHub Actions output
+        $notes = $notes -replace "`n", "%0A"
+        echo "NOTES=$notes" >> $env:GITHUB_OUTPUT
+    
+    - name: Rename APK
+      shell: pwsh
+      run: |
+        # Search more broadly for any APK file
+        $apkFiles = Get-ChildItem -Path ./RenewitSalesforceApp/bin/Release/net8.0-android/**/*.apk -Recurse
+    
+        if ($apkFiles.Count -eq 0) {
+          Write-Host "No APK files found in build output. Checking other possible locations..."
+          # Try alternate locations
+          $apkFiles = Get-ChildItem -Path ./RenewitSalesforceApp/bin/**/*.apk -Recurse
+        }
+    
+        if ($apkFiles.Count -eq 0) {
+          Write-Error "No APK files found. Build may have failed."
+          exit 1
+        }
+    
+        # Select the first APK found (or largest one if multiple exist)
+        $sourceApk = $apkFiles | Sort-Object Length -Descending | Select-Object -First 1
+    
+        Write-Host "Found APK: $($sourceApk.FullName)"
+        Write-Host "APK Size: $([math]::Round($sourceApk.Length / 1MB, 2)) MB"
+    
+        $targetApk = "RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk"
+        Copy-Item $sourceApk.FullName -Destination $targetApk
+        Write-Host "APK renamed to: $targetApk"
+    
+    - name: Create GitHub Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.TAG }}
+        name: Renew-it Salesforce App v${{ steps.version.outputs.VERSION }} (Build ${{ steps.version.outputs.BUILD_NUMBER }})
+        body: ${{ steps.release_notes.outputs.NOTES }}
+        files: RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk
+        draft: false
+        prerelease: false
+    
+    - name: Update version.json
+      shell: pwsh
+      run: |
+        # Create/update version.json
+        $versionInfo = @{
+          version = "${{ steps.version.outputs.VERSION }}"
+          buildNumber = [int]"${{ steps.version.outputs.BUILD_NUMBER }}"
+          notes = "${{ steps.release_notes.outputs.NOTES }}" -replace "%0A", "`n"
+          downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG }}/RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk"
+          required = $false
+          releaseDate = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
+        } | ConvertTo-Json
+        
+        Set-Content -Path docs/version.json -Value $versionInfo
+    
+    - name: Commit changes
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: "Bump build number to ${{ steps.version.outputs.BUILD_NUMBER }} [skip ci]"
+        file_pattern: "RenewitSalesforceApp/RenewitSalesforceApp.csproj docs/version.json"

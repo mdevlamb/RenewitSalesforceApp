@@ -26,6 +26,8 @@ namespace RenewitSalesforceApp
             string dbPath = Path.Combine(FileSystem.AppDataDirectory, "renewit_local.db3");
             Console.WriteLine($"DB path: {dbPath}");
 
+            builder.Services.AddSingleton<UpdateService>();
+
             // Register services in correct order
             builder.Services.AddSingleton<SalesforceService>(sp =>
                 new SalesforceService(isProd: USE_PRODUCTION_SALESFORCE));
