@@ -142,7 +142,7 @@ jobs:
             version = "${{ steps.version.outputs.VERSION }}"
             buildNumber = [int]"${{ steps.version.outputs.BUILD_NUMBER }}"
             notes = $cleanNotes
-            downloadUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}/RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk"
+            downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG }}/RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk"
             required = $false
             releaseDate = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
         }
