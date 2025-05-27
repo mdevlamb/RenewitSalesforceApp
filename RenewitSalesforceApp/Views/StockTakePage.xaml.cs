@@ -89,10 +89,17 @@ namespace RenewitSalesforceApp.Views
             }
         }
 
+
         private async Task LoadPicklistValues()
         {
             try
             {
+                // Get user's allowed branches first
+                var currentUser = _authService.CurrentUser;
+                var userAllowedBranches = currentUser?.GetAllowedBranches() ?? new List<string>();
+
+                Console.WriteLine($"[StockTakePage] User allowed branches: {string.Join(", ", userAllowedBranches)}");
+
                 // Try to load from Salesforce first
                 if (Connectivity.NetworkAccess == NetworkAccess.Internet)
                 {
@@ -103,12 +110,14 @@ namespace RenewitSalesforceApp.Views
 
                     if (branchPicklistValues?.Count > 0)
                     {
-                        BranchPicker.ItemsSource = branchPicklistValues;
-                        Console.WriteLine($"[StockTakePage] Loaded {branchPicklistValues.Count} branch values from Salesforce");
+                        // Filter Salesforce branches based on user permissions
+                        var filteredBranches = FilterBranchesByUserPermissions(branchPicklistValues, userAllowedBranches);
+                        BranchPicker.ItemsSource = filteredBranches;
+                        Console.WriteLine($"[StockTakePage] Loaded {filteredBranches.Count} filtered branch values from Salesforce");
                     }
                     else
                     {
-                        LoadOfflineBranchValues();
+                        LoadOfflineBranchValues(userAllowedBranches);
                     }
 
                     if (departmentPicklistValues?.Count > 0)
@@ -124,7 +133,7 @@ namespace RenewitSalesforceApp.Views
                 else
                 {
                     Console.WriteLine("[StockTakePage] No internet connection, loading offline picklist values");
-                    LoadOfflineBranchValues();
+                    LoadOfflineBranchValues(userAllowedBranches);
                     LoadOfflineDepartmentValues();
                 }
             }
@@ -132,15 +141,84 @@ namespace RenewitSalesforceApp.Views
             {
                 Console.WriteLine($"[StockTakePage] Error loading picklist values from Salesforce: {ex.Message}");
                 // Fallback to offline values
-                LoadOfflineBranchValues();
+                var currentUser = _authService.CurrentUser;
+                var userAllowedBranches = currentUser?.GetAllowedBranches() ?? new List<string>();
+                LoadOfflineBranchValues(userAllowedBranches);
                 LoadOfflineDepartmentValues();
             }
         }
 
-        private void LoadOfflineBranchValues()
+        private List<string> FilterBranchesByUserPermissions(List<string> allBranches, List<string> userAllowedBranches)
         {
-            Console.WriteLine("[StockTakePage] Loading offline branch values");
-            BranchPicker.ItemsSource = YardNames.All;
+            try
+            {
+                // If user has no permissions set, show all branches (fallback)
+                if (userAllowedBranches == null || userAllowedBranches.Count == 0)
+                {
+                    Console.WriteLine("[StockTakePage] User has no branch permissions, showing all branches");
+                    return allBranches;
+                }
+
+                // Filter branches - only show those the user has permission for
+                var filteredBranches = allBranches
+                    .Where(branch => userAllowedBranches.Contains(branch, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                Console.WriteLine($"[StockTakePage] Filtered {allBranches.Count} branches down to {filteredBranches.Count} allowed branches");
+
+                // If no matches found (maybe permissions don't match exactly), show all as fallback
+                if (filteredBranches.Count == 0)
+                {
+                    Console.WriteLine("[StockTakePage] Warning: No branch permissions matched, showing all branches as fallback");
+                    return allBranches;
+                }
+
+                return filteredBranches;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error filtering branches: {ex.Message}");
+                return allBranches; // Fallback to all branches on error
+            }
+        }
+
+        private void LoadOfflineBranchValues(List<string> userAllowedBranches)
+        {
+            try
+            {
+                Console.WriteLine("[StockTakePage] Loading offline branch values");
+
+                // If user has no permissions, show all offline branches (fallback)
+                if (userAllowedBranches == null || userAllowedBranches.Count == 0)
+                {
+                    Console.WriteLine("[StockTakePage] User has no branch permissions, showing all offline branches");
+                    BranchPicker.ItemsSource = YardNames.All;
+                    return;
+                }
+
+                // Filter offline branches based on user permissions
+                var filteredOfflineBranches = YardNames.All
+                    .Where(branch => userAllowedBranches.Contains(branch, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                Console.WriteLine($"[StockTakePage] Filtered {YardNames.All.Length} offline branches down to {filteredOfflineBranches.Count}");
+
+                // If no matches, show all as fallback
+                if (filteredOfflineBranches.Count == 0)
+                {
+                    Console.WriteLine("[StockTakePage] Warning: No offline branch permissions matched, showing all as fallback");
+                    BranchPicker.ItemsSource = YardNames.All;
+                }
+                else
+                {
+                    BranchPicker.ItemsSource = filteredOfflineBranches;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error loading offline branches: {ex.Message}");
+                BranchPicker.ItemsSource = YardNames.All; // Fallback to all
+            }
         }
 
         private void LoadOfflineDepartmentValues()

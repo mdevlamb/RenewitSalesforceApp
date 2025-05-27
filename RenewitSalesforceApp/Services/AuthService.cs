@@ -122,7 +122,7 @@ namespace RenewitSalesforceApp.Services
                 await _salesforceService.EnsureAuthenticatedAsync();
 
                 // Query for the specific PIN only
-                string soql = @"SELECT Id, Name, PIN__c, IsActive__c, Permissions__c, LastModifiedDate 
+                string soql = @"SELECT Id, Name, PIN__c, IsActive__c, Permissions__c, Allowed_Branches__c, LastModifiedDate 
                                FROM Contact 
                                WHERE PIN__c = '" + pin.Replace("'", "\\'") + @"' 
                                AND PIN__c != null 
@@ -147,6 +147,7 @@ namespace RenewitSalesforceApp.Services
                         IsActive = record["IsActive__c"] != null &&
                                   bool.TryParse(record["IsActive__c"].ToString(), out bool isActive) && isActive,
                         Permissions = record["Permissions__c"]?.ToString() ?? "STOCK_TAKE",
+                        BranchPermissions = record["Allowed_Branches__c"]?.ToString() ?? string.Empty,
                         LastSyncDate = DateTime.UtcNow
                     };
 
@@ -194,7 +195,7 @@ namespace RenewitSalesforceApp.Services
                 await _salesforceService.EnsureAuthenticatedAsync();
 
                 // Query Contact records with PIN and active status
-                string soql = @"SELECT Id, Name, PIN__c, IsActive__c, Permissions__c, LastModifiedDate 
+                string soql = @"SELECT Id, Name, PIN__c, IsActive__c, Permissions__c, Allowed_Branches__c, LastModifiedDate 
                                FROM Contact 
                                WHERE PIN__c != null 
                                AND PIN__c != '' 
@@ -222,6 +223,7 @@ namespace RenewitSalesforceApp.Services
                                 IsActive = record["IsActive__c"] != null &&
                                           bool.TryParse(record["IsActive__c"].ToString(), out bool isActive) && isActive,
                                 Permissions = record["Permissions__c"]?.ToString() ?? "STOCK_TAKE",
+                                BranchPermissions = record["Allowed_Branches__c"]?.ToString() ?? string.Empty,
                                 LastSyncDate = DateTime.UtcNow
                             };
 
@@ -357,7 +359,7 @@ namespace RenewitSalesforceApp.Services
         /// <summary>
         /// Manually adds a user to local database (for testing/setup)
         /// </summary>
-        public async Task<bool> AddUserAsync(string id, string name, string pin, string permissions = "STOCK_TAKE")
+        public async Task<bool> AddUserAsync(string id, string name, string pin, string permissions = "STOCK_TAKE", string branchPermissions = "Renew-it Bedfordview")
         {
             try
             {
@@ -368,6 +370,7 @@ namespace RenewitSalesforceApp.Services
                     PIN = pin,
                     IsActive = true,
                     Permissions = permissions,
+                    BranchPermissions = branchPermissions,
                     LastSyncDate = DateTime.UtcNow
                 };
 
