@@ -1,8 +1,8 @@
 {
-    "version": "1.0.0",
-    "buildNumber": 1,
-    "notes": "Initial release with camera photo capture, barcode scanning, GPS location tracking, offline support, and Salesforce integration for vehicle stock takes.",
-    "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0.0-1/RenewitSalesforceApp-v1.0.0-1.apk",
-    "required": false,
-    "releaseDate": "2025-05-27T10:00:00"
+  "buildNumber": 2,
+  "notes": "- Fixed case sensitivity issue for the workflow\n- Excluded keystore files / txt\n- Online - Offline Working - Scanning UX added.\n- User goes offline → Creates stock takes → Goes online: --- HomePage detects connectivity restored --- Auto-sync triggers with loading spinner --- Syncs records to Salesforce --- Shows \"Successfully synced X records!\" alert\n- Offline Sync Working\n- First Time Commit\n- Add project files.\n- Add .gitattributes and .gitignore.",
+  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-2/RenewitSalesforceApp-v1.0-2.apk",
+  "version": "1.0",
+  "required": false,
+  "releaseDate": "2025-05-27T10:40:03"
 }
