@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "releaseDate": "2025-05-27T13:45:08",
-  "notes": "- Merge branch 'master' of https://github.com/mdevlamb/RenewitSalesforceApp\n- Fixed Sync Service Issues And Semaphore Release Issues\n- Bump build number to 4 [skip ci]\n- Merge branch 'master' of https://github.com/mdevlamb/RenewitSalesforceApp\n- Added Branch Permissions\n- Bump build number to 3 [skip ci]\n- Merge branch 'master' of https://github.com/mdevlamb/RenewitSalesforceApp\n- Updated index.html and workflow to return corrent new release url.\n- Bump build number to 2 [skip ci]\n- Fixed case sensitivity issue for the workflow",
-  "buildNumber": 5,
-  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-5/RenewitSalesforceApp-v1.0-5.apk",
-  "required": false
+  "required": false,
+  "notes": "- Offline Sync Fixed Removed Background Sync Managing and Disposing Resources Correctly\n- Commiting current code to fix branch\n- Bump build number to 5 [skip ci]",
+  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-7/RenewitSalesforceApp-v1.0-7.apk",
+  "buildNumber": 7,
+  "releaseDate": "2025-05-27T17:23:01"
 }
