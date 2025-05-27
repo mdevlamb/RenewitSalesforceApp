@@ -1,4 +1,4 @@
-name: Build and Release RenewitSalesforceApp
+﻿name: Build and Release RenewitSalesforceApp
 
 on:
   push:
@@ -44,10 +44,12 @@ jobs:
         $xml.Project.PropertyGroup.ApplicationVersion = $newBuildNumber.ToString()
         $xml.Save("./RenewitSalesforceApp/RenewitSalesforceApp.csproj")
         
-        # Set outputs
+        # Set outputs AND environment variables
         echo "VERSION=$displayVersion" >> $env:GITHUB_OUTPUT
         echo "BUILD_NUMBER=$newBuildNumber" >> $env:GITHUB_OUTPUT
         echo "TAG=v$displayVersion-$newBuildNumber" >> $env:GITHUB_OUTPUT
+        echo "VERSION=$displayVersion" >> $env:GITHUB_ENV
+        echo "BUILD_NUMBER=$newBuildNumber" >> $env:GITHUB_ENV
     
     - name: Restore dependencies
       run: dotnet restore
@@ -124,20 +126,31 @@ jobs:
         draft: false
         prerelease: false
     
-    - name: Update version.json
+    - name: Create/update version.json
       shell: pwsh
       run: |
-        # Create/update version.json
+        # Get release notes and clean special characters
+        $releaseNotes = @"
+        ${{ steps.release_notes.outputs.NOTES }}
+        "@
+    
+        # Remove problematic characters that break PowerShell parsing
+        $cleanNotes = $releaseNotes -replace "[├└│─]", "-" -replace "%0A", "`n"
+    
+        # Create version info object
         $versionInfo = @{
-          version = "${{ steps.version.outputs.VERSION }}"
-          buildNumber = [int]"${{ steps.version.outputs.BUILD_NUMBER }}"
-          notes = "${{ steps.release_notes.outputs.NOTES }}" -replace "%0A", "`n"
-          downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG }}/RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk"
-          required = $false
-          releaseDate = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
-        } | ConvertTo-Json
-        
-        Set-Content -Path docs/version.json -Value $versionInfo
+            version = "${{ steps.version.outputs.VERSION }}"
+            buildNumber = [int]"${{ steps.version.outputs.BUILD_NUMBER }}"
+            notes = $cleanNotes
+            downloadUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}/RenewitSalesforceApp-v${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.BUILD_NUMBER }}.apk"
+            required = $false
+            releaseDate = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
+        }
+    
+        # Convert to JSON and save
+        $versionInfo | ConvertTo-Json -Depth 10 | Set-Content -Path docs/version.json -Encoding UTF8
+    
+        Write-Host "✅ Created version.json successfully"
     
     - name: Commit changes
       uses: stefanzweifel/git-auto-commit-action@v4

@@ -89,10 +89,13 @@ namespace RenewitSalesforceApp.Models
         /// </summary>
         public void SetStockTakeDate(DateTime dateTime)
         {
-            // Use South Africa timezone
-            var southAfricaTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(dateTime, "South Africa Standard Time");
-            Stock_Take_Date__c = southAfricaTime.ToString("yyyy-MM-dd");
-            Console.WriteLine($"[StockTakeRecord] Set Stock Take Date: {Stock_Take_Date__c} at {southAfricaTime}");
+            // FIX: Don't double-convert timezone, use the dateTime as-is
+            LocalStockTakeDate = dateTime;
+
+            // For Salesforce, use ISO format with timezone info to prevent UTC conversion
+            Stock_Take_Date__c = dateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffK");
+
+            Console.WriteLine($"[StockTakeRecord] Set Stock Take Date: {Stock_Take_Date__c} at {dateTime}");
         }
 
         /// <summary>
@@ -109,10 +112,9 @@ namespace RenewitSalesforceApp.Models
         /// </summary>
         public void GenerateRefId()
         {
-            // Use South Africa timezone for consistent timestamps
-            var southAfricaTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.Now, "South Africa Standard Time");
-            REFID__c = southAfricaTime.ToString("yyyyMMddHHmmss");
-            Console.WriteLine($"[StockTakeRecord] Generated REFID: {REFID__c} at {southAfricaTime}");
+            // FIX: Use DateTime.Now directly (it's already in your local SA timezone)
+            REFID__c = DateTime.Now.ToString("yyyyMMddHHmmss");
+            Console.WriteLine($"[StockTakeRecord] Generated REFID: {REFID__c} at {DateTime.Now}");
         }
 
         // Helper properties
