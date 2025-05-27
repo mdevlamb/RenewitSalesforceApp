@@ -112,8 +112,8 @@ namespace RenewitSalesforceApp.Models
         /// </summary>
         public void GenerateRefId()
         {
-            // FIX: Use DateTime.Now directly (it's already in your local SA timezone)
-            REFID__c = DateTime.Now.ToString("yyyyMMddHHmmss");
+            // Use same timezone-aware format as Stock Take Date for consistency
+            REFID__c = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffK");
             Console.WriteLine($"[StockTakeRecord] Generated REFID: {REFID__c} at {DateTime.Now}");
         }
 

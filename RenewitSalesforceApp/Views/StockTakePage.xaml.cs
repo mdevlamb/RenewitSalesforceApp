@@ -876,8 +876,8 @@ namespace RenewitSalesforceApp.Views
 
         private async void OnTakePhotoClicked(object sender, EventArgs e)
         {
-            // Wait for camera to be available
-            if (!await _cameraSemaphore.WaitAsync(5000))
+            // FIXED: Better semaphore handling and resource cleanup
+            if (!await _cameraSemaphore.WaitAsync(3000)) // Reduced timeout
             {
                 await DisplayAlert("Camera Busy", "Camera is currently in use. Please wait and try again.", "OK");
                 return;
@@ -913,8 +913,8 @@ namespace RenewitSalesforceApp.Views
                 FullScreenLoadingOverlay.IsVisible = true;
                 Console.WriteLine("[StockTakePage] Starting camera capture...");
 
-                // Add delay to ensure camera is fully released from previous operations
-                await Task.Delay(500);
+                // FIXED: Shorter delay to prevent resource conflicts
+                await Task.Delay(200);
 
                 FileResult photo = null;
 
@@ -1004,12 +1004,17 @@ namespace RenewitSalesforceApp.Views
                         // Full path for the saved photo
                         string localFilePath = Path.Combine(photosFolder, fileName);
 
-                        // Copy the photo to our app's directory
+                        // FIXED: Use proper stream disposal (FileResult doesn't need disposal)
                         using (var sourceStream = await photo.OpenReadAsync())
-                        using (var localFileStream = File.Create(localFilePath))
                         {
-                            await sourceStream.CopyToAsync(localFileStream);
+                            using (var localFileStream = File.Create(localFilePath))
+                            {
+                                await sourceStream.CopyToAsync(localFileStream);
+                                await localFileStream.FlushAsync(); // Ensure write completes
+                            }
                         }
+
+                        // FileResult doesn't need disposal - just set to null for GC
 
                         // Verify file was saved
                         if (File.Exists(localFilePath))
@@ -1057,13 +1062,17 @@ namespace RenewitSalesforceApp.Views
             }
             finally
             {
-                // Always hide loading overlay and release camera semaphore
-                FullScreenLoadingOverlay.IsVisible = false;
+                // FIXED: Always hide loading overlay and release semaphore quickly
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    FullScreenLoadingOverlay.IsVisible = false;
+                });
+
                 Console.WriteLine("[StockTakePage] Photo capture process completed");
 
-                // Add delay before releasing semaphore to ensure camera is fully released
-                await Task.Delay(1000);
+                // FIXED: Immediate semaphore release - no delay
                 _cameraSemaphore.Release();
+                Console.WriteLine("[StockTakePage] Camera semaphore released");
             }
         }
 
