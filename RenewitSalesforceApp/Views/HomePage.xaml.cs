@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -148,22 +148,34 @@ namespace RenewitSalesforceApp.Views
                 {
                     Console.WriteLine("HomePage: Network restored after being offline");
 
-                    // Wait longer for background SyncService to complete
-                    await Task.Delay(5000);
-
-                    // Reload to check current status after background sync
+                    // Check if we have pending items FIRST
                     LoadPendingTransactions();
 
-                    // Show user feedback about what happened
-                    await MainThread.InvokeOnMainThreadAsync(async () =>
+                    if (HasPendingTransactions)
                     {
-                        if (HasPendingTransactions)
-                        {
-                            // Still have pending - background sync didn't complete
-                            Console.WriteLine("HomePage: Background sync incomplete, showing auto-sync option");
+                        Console.WriteLine($"HomePage: Found {_pendingTransactionCount} pending items, showing sync progress");
 
-                            bool userWantsSync = await DisplayAlert("Network Restored",
-                                "Internet connection restored. You have pending stock takes to sync.",
+                        // Show immediate UI feedback with spinner
+                        IsBusy = true;
+
+                        // Wait for background sync to complete with user feedback
+                        await Task.Delay(3000); // Give background sync time to work
+
+                        // Check results after background sync
+                        LoadPendingTransactions();
+
+                        if (!HasPendingTransactions)
+                        {
+                            // Background sync worked!
+                            await DisplayAlert("Sync Complete",
+                                $"✅ Successfully synced {_pendingTransactionCount} stock take{(_pendingTransactionCount > 1 ? "s" : "")} to Salesforce!",
+                                "Great!");
+                        }
+                        else
+                        {
+                            // Still have pending - offer manual sync
+                            bool userWantsSync = await DisplayAlert("Manual Sync Needed",
+                                $"Found {_pendingTransactionCount} pending stock take{(_pendingTransactionCount > 1 ? "s" : "")}. Sync now?",
                                 "Sync Now", "Later");
 
                             if (userWantsSync)
@@ -171,15 +183,13 @@ namespace RenewitSalesforceApp.Views
                                 await PerformManualSync("User requested sync after connectivity restored");
                             }
                         }
-                        else
-                        {
-                            // No pending items - background sync worked
-                            Console.WriteLine("HomePage: Background sync completed successfully");
-                            await DisplayAlert("Sync Complete",
-                                "Internet connection restored. Your pending stock takes have been automatically synced to Salesforce!",
-                                "Great!");
-                        }
-                    });
+
+                        IsBusy = false;
+                    }
+                    else
+                    {
+                        Console.WriteLine("HomePage: No pending items found");
+                    }
                 }
 
                 // Always refresh pending transactions when connectivity changes
@@ -207,11 +217,31 @@ namespace RenewitSalesforceApp.Views
 
                 UpdateUserGreeting();
 
-                // Give time for background services to complete
-                await Task.Delay(3000);
-
-                // ALWAYS refresh the pending transactions when the page appears
+                // Check for pending items immediately
                 LoadPendingTransactions();
+
+                // If we're online and have pending items, show sync in progress
+                if (!IsOfflineMode && HasPendingTransactions)
+                {
+                    Console.WriteLine($"HomePage: Online with {_pendingTransactionCount} pending items - showing sync progress");
+                    IsBusy = true;
+
+                    // Wait for background sync
+                    await Task.Delay(4000);
+
+                    // Check results
+                    int originalCount = _pendingTransactionCount;
+                    LoadPendingTransactions();
+
+                    if (!HasPendingTransactions)
+                    {
+                        await DisplayAlert("Auto-Sync Complete",
+                            $"✅ Successfully synced {originalCount} stock take{(originalCount > 1 ? "s" : "")} to Salesforce!",
+                            "Great!");
+                    }
+
+                    IsBusy = false;
+                }
 
                 // Force a UI update for HasPendingTransactions
                 OnPropertyChanged(nameof(HasPendingTransactions));

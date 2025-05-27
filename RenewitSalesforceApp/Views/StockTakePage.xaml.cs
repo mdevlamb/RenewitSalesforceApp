@@ -913,8 +913,8 @@ namespace RenewitSalesforceApp.Views
                 FullScreenLoadingOverlay.IsVisible = true;
                 Console.WriteLine("[StockTakePage] Starting camera capture...");
 
-                // FIXED: Shorter delay to prevent resource conflicts
-                await Task.Delay(200);
+                // Add delay to ensure camera is fully available after barcode scan
+                await Task.Delay(1500); // Increased delay for camera resource cleanup
 
                 FileResult photo = null;
 
