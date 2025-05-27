@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-3/RenewitSalesforceApp-v1.0-3.apk",
-  "notes": "- Merge branch 'master' of https://github.com/mdevlamb/RenewitSalesforceApp\n- Updated index.html and workflow to return corrent new release url.\n- Bump build number to 2 [skip ci]\n- Fixed case sensitivity issue for the workflow\n- Excluded keystore files / txt\n- Online - Offline Working - Scanning UX added.\n- User goes offline → Creates stock takes → Goes online: --- HomePage detects connectivity restored --- Auto-sync triggers with loading spinner --- Syncs records to Salesforce --- Shows \"Successfully synced X records!\" alert\n- Offline Sync Working\n- First Time Commit\n- Add project files.",
-  "releaseDate": "2025-05-27T11:33:15",
-  "buildNumber": 3,
-  "required": false
+  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-4/RenewitSalesforceApp-v1.0-4.apk",
+  "notes": "- Merge branch 'master' of https://github.com/mdevlamb/RenewitSalesforceApp\n- Added Branch Permissions\n- Bump build number to 3 [skip ci]\n- Merge branch 'master' of https://github.com/mdevlamb/RenewitSalesforceApp\n- Updated index.html and workflow to return corrent new release url.\n- Bump build number to 2 [skip ci]\n- Fixed case sensitivity issue for the workflow\n- Excluded keystore files / txt\n- Online - Offline Working - Scanning UX added.\n- User goes offline → Creates stock takes → Goes online: --- HomePage detects connectivity restored --- Auto-sync triggers with loading spinner --- Syncs records to Salesforce --- Shows \"Successfully synced X records!\" alert",
+  "required": false,
+  "buildNumber": 4,
+  "releaseDate": "2025-05-27T12:18:26"
 }
