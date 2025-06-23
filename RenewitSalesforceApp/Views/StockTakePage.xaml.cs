@@ -1,6 +1,7 @@
 ﻿using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Networking;
+using Microsoft.Maui.Platform;
 using RenewitSalesforceApp.Models;
 using RenewitSalesforceApp.Services;
 using System;
@@ -28,6 +29,9 @@ namespace RenewitSalesforceApp.Views
         private CameraBarcodeReaderView _currentBarcodeReader;
         private bool _isCameraInUse = false;
         private DateTime _lastCameraUse = DateTime.MinValue;
+
+        private Button _flashlightButton;
+        private bool _isFlashlightOn = false;
 
         public bool IsOfflineMode
         {
@@ -307,26 +311,20 @@ namespace RenewitSalesforceApp.Views
                     }
                 }
 
-                // Force garbage collection to clean up any previous camera resources
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-
-                // Add longer delay to ensure camera is fully available
-                await Task.Delay(1000);
-
                 var barcodeReader = new CameraBarcodeReaderView
                 {
                     Options = new BarcodeReaderOptions
                     {
-                        Formats = BarcodeFormats.All,
-                        AutoRotate = true,
+                        Formats = BarcodeFormat.Pdf417,
+                        AutoRotate = false,
                         Multiple = false
-                    }
+                    },
+                    IsTorchOn = false
                 };
 
                 // Store reference to current barcode reader
                 _currentBarcodeReader = barcodeReader;
+                _isFlashlightOn = false;
 
                 var tcs = new TaskCompletionSource<string>();
                 bool hasScanned = false;
@@ -344,9 +342,10 @@ namespace RenewitSalesforceApp.Views
                             hasScanned = true;
 
                             // Immediately stop the camera
-                            MainThread.BeginInvokeOnMainThread(() =>
+                            await MainThread.InvokeOnMainThreadAsync(async () =>
                             {
                                 barcodeReader.IsEnabled = false;
+                                await TurnOffFlashlight(); // No error!
                             });
 
                             // SUCCESS FEEDBACK
@@ -399,12 +398,13 @@ namespace RenewitSalesforceApp.Views
                     FontSize = 16
                 };
 
-                cancelButton.Clicked += (s, e) =>
+                cancelButton.Clicked += async (s, e) =>
                 {
                     hasScanned = true;
-                    MainThread.BeginInvokeOnMainThread(() =>
+                    await MainThread.InvokeOnMainThreadAsync(async () =>
                     {
                         barcodeReader.IsEnabled = false;
+                        await TurnOffFlashlight();
                     });
                     tcs.TrySetResult(null);
                 };
@@ -460,13 +460,14 @@ namespace RenewitSalesforceApp.Views
                 };
 
                 // Add disappearing handler to clean up
-                scanPage.Disappearing += (s, e) =>
+                scanPage.Disappearing += async (s, e) =>  // ← Add 'async'
                 {
-                    MainThread.BeginInvokeOnMainThread(() =>
+                    await MainThread.InvokeOnMainThreadAsync(async () =>  // ← Use InvokeOnMainThreadAsync
                     {
                         if (_currentBarcodeReader != null)
                         {
                             _currentBarcodeReader.IsEnabled = false;
+                            await TurnOffFlashlight();  // ← Add flashlight cleanup
                             _currentBarcodeReader = null;
                         }
                     });
@@ -506,17 +507,11 @@ namespace RenewitSalesforceApp.Views
             finally
             {
                 // Clean up
+                await TurnOffFlashlight();
                 _currentBarcodeReader = null;
                 _isCameraInUse = false;
                 _lastCameraUse = DateTime.Now;
-
-                // Force cleanup
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-
-                // Add longer delay before releasing semaphore
-                await Task.Delay(2000);
+                _flashlightButton = null;
                 _cameraSemaphore.Release();
                 Console.WriteLine("[StockTakePage] Barcode scanner released camera resources");
             }
@@ -526,51 +521,87 @@ namespace RenewitSalesforceApp.Views
         {
             var overlay = new Grid
             {
-                InputTransparent = true, // Allow touches to pass through
+                InputTransparent = false, // Changed to false to allow button interactions
                 BackgroundColor = Colors.Transparent,
-                RowDefinitions =
+                RowDefinitions = new RowDefinitionCollection
         {
-            new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }, // Top
-            new RowDefinition { Height = new GridLength(120) },                  // Scan area (increased)
-            new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }  // Bottom
+            new RowDefinition { Height = new GridLength(60) },                       // Top area for flashlight button
+            new RowDefinition { Height = new GridLength(0.4, GridUnitType.Star) },  // Middle area 
+            new RowDefinition { Height = new GridLength(120) },                      // Barcode scanning area 
+            new RowDefinition { Height = new GridLength(0.6, GridUnitType.Star) }   // Bottom area
         }
             };
 
-            // Top semi-transparent overlay
-            var topOverlay = new BoxView
+            // Top area with flashlight button
+            var topContainer = new Grid
             {
-                BackgroundColor = Color.FromArgb("#80000000") // Semi-transparent black
+                BackgroundColor = Color.FromArgb("#80000000"),
+                Padding = new Thickness(20, 10)
             };
-            overlay.Add(topOverlay, 0, 0);
 
-            // Bottom semi-transparent overlay
+            var flashlightButton = new Button
+            {
+                Text = "\ue8f4",  // Material Icons flashlight_on
+                FontFamily = "MaterialIcons",
+                FontSize = 24,
+                BackgroundColor = Color.FromArgb("#40FFFFFF"),
+                TextColor = Colors.White,
+                CornerRadius = 25,
+                WidthRequest = 50,
+                HeightRequest = 50,
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.Center,
+                BorderColor = Colors.White,
+                BorderWidth = 1
+            };
+
+            // Store reference to flashlight button for updates
+            _flashlightButton = flashlightButton;
+
+            flashlightButton.Clicked += OnFlashlightToggle;
+            topContainer.Children.Add(flashlightButton);
+            overlay.Add(topContainer, 0, 0);
+
+            // Middle semi-transparent overlay
+            var middleOverlay = new BoxView
+            {
+                BackgroundColor = Color.FromArgb("#80000000"),
+                InputTransparent = true
+            };
+            overlay.Add(middleOverlay, 0, 1);
+
+            // Bottom semi-transparent overlay  
             var bottomOverlay = new BoxView
             {
-                BackgroundColor = Color.FromArgb("#80000000") // Semi-transparent black
+                BackgroundColor = Color.FromArgb("#80000000"),
+                InputTransparent = true
             };
-            overlay.Add(bottomOverlay, 0, 2);
+            overlay.Add(bottomOverlay, 0, 3);
 
-            // Clear scanning area in the middle (row 1) - NO GREEN BORDER FRAME
+            // Clear barcode scanning area - positioned where the actual barcode is
             var scanningAreaContainer = new Grid
             {
                 BackgroundColor = Colors.Transparent,
-                Margin = new Thickness(30, 0) // Reduced side margins for wider area
+                Margin = new Thickness(40, 0), // Focus on barcode width
+                InputTransparent = true
             };
 
-            // Add corner guides to the scanning area (no border frame)
-            AddCornerGuides(scanningAreaContainer);
+            // Add minimal scanning guides focused on barcode area
+            AddBarcodeTargetGuides(scanningAreaContainer);
 
-            overlay.Add(scanningAreaContainer, 0, 1);
+            overlay.Add(scanningAreaContainer, 0, 2);
 
             return overlay;
         }
 
-        private void AddCornerGuides(Grid container)
+        private void AddBarcodeTargetGuides(Grid container)
         {
-            // Corner guide parameters - wider scanning area
-            var cornerSize = 30;        // Longer corner lines
-            var cornerThickness = 4;    // Thicker lines
-            var cornerOffset = 15;      // Further from edges for wider area
+            // Minimal corner guides - just small corners to indicate barcode area
+            var cornerSize = 20;        // Smaller, cleaner corners
+            var cornerThickness = 3;    // Thinner lines
+            var cornerOffset = 8;       // Closer to actual barcode edges
+
+            // Only add corner brackets - no center lines or extra elements
 
             // Top-left corner
             var topLeftH = new BoxView
@@ -656,7 +687,7 @@ namespace RenewitSalesforceApp.Views
                 Margin = new Thickness(0, 0, cornerOffset, cornerOffset)
             };
 
-            // Add all corner pieces
+            // Add only the corner guides - clean and minimal
             container.Children.Add(topLeftH);
             container.Children.Add(topLeftV);
             container.Children.Add(topRightH);
@@ -690,17 +721,14 @@ namespace RenewitSalesforceApp.Views
         {
             try
             {
-                // Use Android's notification sound
-                var context = Platform.CurrentActivity ?? Android.App.Application.Context;
-                var notification = Android.Media.RingtoneManager.GetDefaultUri(Android.Media.RingtoneType.Notification);
-                var ringtone = Android.Media.RingtoneManager.GetRingtone(context, notification);
-                ringtone?.Play();
-
-                await Task.Delay(100); // Brief delay
+                var toneGenerator = new Android.Media.ToneGenerator(Android.Media.Stream.Notification, 80);
+                toneGenerator.StartTone(Android.Media.Tone.PropBeep, 200);
+                await Task.Delay(200);
+                toneGenerator.Release();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Android sound error: {ex.Message}");
+                Console.WriteLine($"Modern sound error: {ex.Message}");
             }
         }
 #endif
@@ -924,6 +952,75 @@ namespace RenewitSalesforceApp.Views
             }
         }
 
+        // Add this method for flashlight toggle
+        private async void OnFlashlightToggle(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_currentBarcodeReader != null)
+                {
+                    _isFlashlightOn = !_isFlashlightOn;
+
+                    // Toggle the torch on the camera
+                    _currentBarcodeReader.IsTorchOn = _isFlashlightOn;
+
+                    // Update button appearance
+                    UpdateFlashlightButtonAppearance();
+
+                    Console.WriteLine($"[StockTakePage] Flashlight toggled: {(_isFlashlightOn ? "ON" : "OFF")}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error toggling flashlight: {ex.Message}");
+                await DisplayAlert("Flashlight Error", "Could not control flashlight", "OK");
+            }
+        }
+
+        // Add this method to update flashlight button appearance
+        private void UpdateFlashlightButtonAppearance()
+        {
+            if (_flashlightButton != null)
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    if (_isFlashlightOn)
+                    {
+                        _flashlightButton.Text = "\ue8f4";  // flashlight_on
+                        _flashlightButton.BackgroundColor = Color.FromArgb("#FFD700");
+                        _flashlightButton.TextColor = Colors.Black;
+                        _flashlightButton.BorderColor = Color.FromArgb("#FFD700");
+                    }
+                    else
+                    {
+                        _flashlightButton.Text = "\ue8f5";  // flashlight_off
+                        _flashlightButton.BackgroundColor = Color.FromArgb("#40FFFFFF");
+                        _flashlightButton.TextColor = Colors.White;
+                        _flashlightButton.BorderColor = Colors.White;
+                    }
+                });
+            }
+        }
+
+        // Add this method to ensure flashlight is turned off
+        private async Task TurnOffFlashlight()
+        {
+            try
+            {
+                if (_currentBarcodeReader != null && _isFlashlightOn)
+                {
+                    _currentBarcodeReader.IsTorchOn = false;
+                    _isFlashlightOn = false;
+                    UpdateFlashlightButtonAppearance();
+                    Console.WriteLine("[StockTakePage] Flashlight turned off");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error turning off flashlight: {ex.Message}");
+            }
+        }
+
         private async void OnTakePhotoClicked(object sender, EventArgs e)
         {
             // Check if camera was recently used
@@ -967,16 +1064,9 @@ namespace RenewitSalesforceApp.Views
                     return;
                 }
 
-                // Force cleanup before using camera
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-
                 // Show loading overlay
                 FullScreenLoadingOverlay.IsVisible = true;
 
-                // Longer delay to ensure camera is ready
-                await Task.Delay(2000);
 
                 FileResult photo = null;
 
@@ -1079,13 +1169,6 @@ namespace RenewitSalesforceApp.Views
                 _isCameraInUse = false;
                 _lastCameraUse = DateTime.Now;
 
-                // Force cleanup
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-
-                // Delay before releasing semaphore
-                await Task.Delay(1000);
                 _cameraSemaphore.Release();
                 Console.WriteLine("[StockTakePage] Camera resources released");
             }
@@ -1484,12 +1567,19 @@ namespace RenewitSalesforceApp.Views
                 // SHOW LOADING SPINNER
                 FullScreenLoadingOverlay.IsVisible = true;
 
-                // 1. Validate required data
                 if (!ValidateData())
                 {
+                    // Hide loading overlay first
+                    FullScreenLoadingOverlay.IsVisible = false;
+
+                    // Show the alert
                     await DisplayAlert("Incomplete Data",
                         "Please fill in all required fields:\n• Vehicle Registration\n• Branch\n• Department",
                         "OK");
+
+                    // Auto-scroll to the Location Assignment section
+                    await ScrollToLocationAssignmentSection();
+
                     return;
                 }
 
@@ -1643,6 +1733,68 @@ namespace RenewitSalesforceApp.Views
                 FullScreenLoadingOverlay.IsVisible = false;
                 SubmitButton.Text = "Submit Stock Take";
                 SubmitButton.IsEnabled = true;
+            }
+        }
+
+        private async Task ScrollToLocationAssignmentSection()
+        {
+            try
+            {
+                Console.WriteLine("[StockTakePage] Scrolling to Location Assignment section");
+
+                // Find the ScrollView and Location Assignment Frame
+                var scrollView = MainScrollView;
+                var locationFrame = LocationAssignmentFrame;
+
+                if (scrollView != null && locationFrame != null)
+                {
+                    // Scroll to the Location Assignment frame with animation
+                    await scrollView.ScrollToAsync(locationFrame, ScrollToPosition.Start, true);
+
+                    Console.WriteLine("[StockTakePage] Successfully scrolled to Location Assignment section");
+
+                    // Optional: Add a brief highlight effect to draw attention
+                    await HighlightLocationSection(locationFrame);
+                }
+                else
+                {
+                    Console.WriteLine("[StockTakePage] Could not find ScrollView or LocationFrame for scrolling");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error scrolling to location section: {ex.Message}");
+            }
+        }
+
+        // Optional: Add a visual highlight effect to draw attention
+        private async Task HighlightLocationSection(Frame locationFrame)
+        {
+            try
+            {
+                Console.WriteLine("[StockTakePage] Highlighting Location Assignment section");
+
+                // Store original border color
+                var originalBorderColor = locationFrame.BorderColor;
+
+                // Flash the border to draw attention - make it more prominent
+                locationFrame.BorderColor = Colors.Red;
+                await Task.Delay(400);
+
+                locationFrame.BorderColor = Colors.Orange;
+                await Task.Delay(400);
+
+                locationFrame.BorderColor = Colors.Red;
+                await Task.Delay(400);
+
+                // Restore original color
+                locationFrame.BorderColor = originalBorderColor;
+
+                Console.WriteLine("[StockTakePage] Location Assignment section highlight complete");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error highlighting section: {ex.Message}");
             }
         }
 

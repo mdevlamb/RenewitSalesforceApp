@@ -144,7 +144,8 @@ namespace RenewitSalesforceApp.Views
                 }
             }
 
-            LoadingIndicator.IsVisible = true;
+            // Show loading overlay
+            LoadingOverlay.IsVisible = true;
             LoadingIndicator.IsRunning = true;
             LoginButton.IsEnabled = false;
 
@@ -187,7 +188,8 @@ namespace RenewitSalesforceApp.Views
             }
             finally
             {
-                LoadingIndicator.IsVisible = false;
+                // Hide loading overlay
+                LoadingOverlay.IsVisible = false;
                 LoadingIndicator.IsRunning = false;
                 LoginButton.IsEnabled = true;
             }
