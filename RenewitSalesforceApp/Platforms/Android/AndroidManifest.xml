@@ -1,13 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="za.co.renewit.salesforceapp">
-
 	<!-- ADD THIS QUERIES SECTION -->
 	<queries>
 		<intent>
 			<action android:name="android.media.action.IMAGE_CAPTURE" />
 		</intent>
 	</queries>
-
 	<!-- Your existing permissions -->
 	<uses-permission android:name="android.permission.INTERNET" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -19,14 +17,12 @@
 	<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 	<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 	<uses-permission android:name="android.permission.FLASHLIGHT" />
-
 	<!-- Your existing features -->
 	<uses-feature android:name="android.hardware.camera" android:required="true" />
 	<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 	<uses-feature android:name="android.hardware.camera.flash" android:required="false" />
-
 	<!-- Keep your application simple -->
-	<application android:allowBackup="true" android:enableOnBackInvokedCallback="true" android:icon="@mipmap/appicon" android:supportsRtl="true" android:label="Renew-it Salesforce App">
+	<application android:allowBackup="true" android:enableOnBackInvokedCallback="true" android:icon="@mipmap/appicon" android:supportsRtl="true" android:label="Renew-it Stock Take ">
 		<!-- Remove the provider for now -->
 	</application>
 </manifest>

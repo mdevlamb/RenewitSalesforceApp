@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -6,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Storage;
 
 namespace RenewitSalesforceApp.Services
 {
@@ -200,9 +202,9 @@ namespace RenewitSalesforceApp.Services
             // Use MainThread for UI operations
             await MainThread.InvokeOnMainThreadAsync(async () =>
             {
-                // Customize update dialog for Renew-it
+                // Removed emojis from titles
                 string title = latestInfo.Required ?
-                    "🚨 Required Update" : "📱 Update Available";
+                    "Required Update" : "Update Available";
 
                 string message = $"Version {latestInfo.Version} (Build {latestInfo.BuildNumber}) is available.\n\n" +
                                $"What's New:\n{TruncateNotes(latestInfo.Notes)}\n\n" +
@@ -234,31 +236,157 @@ namespace RenewitSalesforceApp.Services
 
             try
             {
-                // Force external browser to handle APK downloads properly
-                await Browser.OpenAsync(latestInfo.DownloadUrl, BrowserLaunchMode.External);
-                Console.WriteLine("[UpdateService] Successfully opened download URL in external browser");
-            }
-            catch (Exception browserEx)
-            {
-                Console.WriteLine($"[UpdateService] Error opening browser: {browserEx.Message}");
+                // Try direct download first (Android only)
+                if (DeviceInfo.Platform == DevicePlatform.Android)
+                {
+                    Console.WriteLine("[UpdateService] Attempting direct APK download...");
 
-                // Fallback: Show download URL to user
-                await Application.Current.MainPage.DisplayAlert(
-                    "Download Link",
-                    $"Please copy this link and open it in your browser:\n\n{latestInfo.DownloadUrl}",
-                    "OK");
+                    bool downloadSuccess = await TryDirectDownload(latestInfo.DownloadUrl);
+
+                    if (downloadSuccess)
+                    {
+                        Console.WriteLine("[UpdateService] Direct download completed successfully");
+                        return;
+                    }
+                    else
+                    {
+                        Console.WriteLine("[UpdateService] Direct download failed, falling back to browser");
+                    }
+                }
+
+                // Fallback to browser download
+                await ShowBrowserDownloadOptions(latestInfo);
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[UpdateService] Download error: {ex.Message}");
+                await ShowBrowserDownloadOptions(latestInfo);
+            }
+        }
+
+        private async Task<bool> TryDirectDownload(string downloadUrl)
+        {
+            try
+            {
+                // Show loading indicator
+                await Application.Current.MainPage.DisplayAlert(
+                    "Downloading",
+                    "Download starting... Please wait.",
+                    "OK");
+
+                // Download the APK file
+                using var response = await _client.GetAsync(downloadUrl);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[UpdateService] Download failed with status: {response.StatusCode}");
+                    return false;
+                }
+
+                // Get the file name from the URL or headers
+                string fileName = "RenewitSalesforceApp_Update.apk";
+                if (response.Content.Headers.ContentDisposition?.FileName != null)
+                {
+                    fileName = response.Content.Headers.ContentDisposition.FileName.Trim('"');
+                }
+
+                // Save to Downloads folder (cross-platform approach)
+                string downloadsPath;
+                if (DeviceInfo.Platform == DevicePlatform.Android)
+                {
+                    // Use a public directory that doesn't require special permissions
+                    downloadsPath = Path.Combine("/storage/emulated/0/Download");
+                }
+                else
+                {
+                    // Fallback for other platforms
+                    downloadsPath = Path.Combine(FileSystem.AppDataDirectory, "Downloads");
+                    Directory.CreateDirectory(downloadsPath);
+                }
+                string filePath = Path.Combine(downloadsPath, fileName);
+
+                // Write the file
+                using var fileStream = File.Create(filePath);
+                await response.Content.CopyToAsync(fileStream);
+
+                Console.WriteLine($"[UpdateService] APK downloaded to: {filePath}");
+
+                // Show success message with install instructions
+                await Application.Current.MainPage.DisplayAlert(
+                    "Download Complete",
+                    $"Update downloaded successfully!\n\n" +
+                    $"File saved to: Downloads/{fileName}\n\n" +
+                    $"To install:\n" +
+                    $"1. Open your file manager or notification panel\n" +
+                    $"2. Tap on the downloaded APK file\n" +
+                    $"3. Enable 'Install from Unknown Sources' if prompted\n" +
+                    $"4. Tap 'Install' to update the app",
+                    "OK");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[UpdateService] Direct download error: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task ShowBrowserDownloadOptions(AppVersionInfo latestInfo)
+        {
+            // Create a custom page with download options
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                string action = await Application.Current.MainPage.DisplayActionSheet(
+                    "Download Options",
+                    "Cancel",
+                    null,
+                    "Open Download Link in Browser",
+                    "Copy Download Link to Clipboard");
+
+                switch (action)
+                {
+                    case "Open Download Link in Browser":
+                        try
+                        {
+                            await Browser.OpenAsync(latestInfo.DownloadUrl, BrowserLaunchMode.External);
+                            Console.WriteLine("[UpdateService] Successfully opened download URL in external browser");
+                        }
+                        catch (Exception browserEx)
+                        {
+                            Console.WriteLine($"[UpdateService] Error opening browser: {browserEx.Message}");
+                            await ShowDownloadError();
+                        }
+                        break;
+
+                    case "Copy Download Link to Clipboard":
+                        try
+                        {
+                            await Clipboard.SetTextAsync(latestInfo.DownloadUrl);
+                            await Application.Current.MainPage.DisplayAlert(
+                                "Link Copied",
+                                "Download link copied to clipboard. You can now paste it in your browser.",
+                                "OK");
+                        }
+                        catch (Exception clipEx)
+                        {
+                            Console.WriteLine($"[UpdateService] Error copying to clipboard: {clipEx.Message}");
+                            await ShowDownloadError();
+                        }
+                        break;
+
+                    default:
+                        Console.WriteLine("[UpdateService] User cancelled download");
+                        break;
+                }
+            });
 
             // If required, show instructions and exit app
             if (latestInfo.Required)
             {
                 await Application.Current.MainPage.DisplayAlert(
-                    "Installation Instructions",
-                    "1. Download the APK file from your browser\n" +
-                    "2. Tap on the downloaded file when complete\n" +
-                    "3. Enable 'Install from Unknown Sources' if prompted\n" +
-                    "4. Tap 'Install' to update the app\n\n" +
-                    "The app will now close. Please install the update to continue.",
+                    "Installation Required",
+                    "This update is required to continue using the app. " +
+                    "Please download and install the update, then restart the app.",
                     "OK");
 
                 // Exit app on Android
@@ -268,6 +396,14 @@ namespace RenewitSalesforceApp.Services
                     System.Diagnostics.Process.GetCurrentProcess().Kill();
                 }
             }
+        }
+
+        private async Task ShowDownloadError()
+        {
+            await Application.Current.MainPage.DisplayAlert(
+                "Download Error",
+                "Unable to download the update automatically. Please visit the app store or contact support.",
+                "OK");
         }
 
         private string TruncateNotes(string notes)

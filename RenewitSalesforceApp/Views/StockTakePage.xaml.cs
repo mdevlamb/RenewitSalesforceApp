@@ -33,6 +33,9 @@ namespace RenewitSalesforceApp.Views
         private Button _flashlightButton;
         private bool _isFlashlightOn = false;
 
+        private const string PREF_LAST_BRANCH = "LastSelectedBranch";
+        private const string PREF_LAST_DEPARTMENT = "LastSelectedDepartment";
+
         public bool IsOfflineMode
         {
             get => _isOfflineMode;
@@ -83,6 +86,8 @@ namespace RenewitSalesforceApp.Views
                 // Subscribe to connectivity changes
                 Connectivity.ConnectivityChanged += Connectivity_ConnectivityChanged;
 
+                LoadCachedSelections();
+
                 // Request location immediately when page opens
                 Console.WriteLine("[StockTakePage] Requesting location services immediately");
                 await GetCurrentLocationAsync();
@@ -92,6 +97,102 @@ namespace RenewitSalesforceApp.Views
             catch (Exception ex)
             {
                 Console.WriteLine($"[StockTakePage] Error initializing page: {ex.Message}");
+            }
+        }
+
+        private void LoadCachedSelections()
+        {
+            try
+            {
+                Console.WriteLine("[StockTakePage] Loading cached picker selections");
+
+                // Load cached branch selection
+                string lastBranch = Preferences.Get(PREF_LAST_BRANCH, string.Empty);
+                if (!string.IsNullOrEmpty(lastBranch) && BranchPicker.ItemsSource != null)
+                {
+                    var branchItems = BranchPicker.ItemsSource as IList<string>;
+                    if (branchItems != null)
+                    {
+                        int branchIndex = branchItems.ToList().FindIndex(x =>
+                            string.Equals(x, lastBranch, StringComparison.OrdinalIgnoreCase));
+
+                        if (branchIndex >= 0)
+                        {
+                            BranchPicker.SelectedIndex = branchIndex;
+                            Console.WriteLine($"[StockTakePage] Automatically restored branch: {lastBranch}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[StockTakePage] Cached branch '{lastBranch}' not found in current list");
+                        }
+                    }
+                }
+
+                // Load cached department selection
+                string lastDepartment = Preferences.Get(PREF_LAST_DEPARTMENT, string.Empty);
+                if (!string.IsNullOrEmpty(lastDepartment) && DepartmentPicker.ItemsSource != null)
+                {
+                    var departmentItems = DepartmentPicker.ItemsSource as IList<string>;
+                    if (departmentItems != null)
+                    {
+                        int departmentIndex = departmentItems.ToList().FindIndex(x =>
+                            string.Equals(x, lastDepartment, StringComparison.OrdinalIgnoreCase));
+
+                        if (departmentIndex >= 0)
+                        {
+                            DepartmentPicker.SelectedIndex = departmentIndex;
+                            Console.WriteLine($"[StockTakePage] Automatically restored department: {lastDepartment}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[StockTakePage] Cached department '{lastDepartment}' not found in current list");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error loading cached selections: {ex.Message}");
+            }
+        }
+
+        private void SaveCachedSelections()
+        {
+            try
+            {
+                // Save branch selection
+                if (BranchPicker.SelectedIndex >= 0 && BranchPicker.Items?.Count > 0)
+                {
+                    string selectedBranch = BranchPicker.Items[BranchPicker.SelectedIndex];
+                    Preferences.Set(PREF_LAST_BRANCH, selectedBranch);
+                    Console.WriteLine($"[StockTakePage] Cached branch selection: {selectedBranch}");
+                }
+
+                // Save department selection
+                if (DepartmentPicker.SelectedIndex >= 0 && DepartmentPicker.Items?.Count > 0)
+                {
+                    string selectedDepartment = DepartmentPicker.Items[DepartmentPicker.SelectedIndex];
+                    Preferences.Set(PREF_LAST_DEPARTMENT, selectedDepartment);
+                    Console.WriteLine($"[StockTakePage] Cached department selection: {selectedDepartment}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error saving cached selections: {ex.Message}");
+            }
+        }
+
+        public static void ClearCachedSelections()
+        {
+            try
+            {
+                Preferences.Remove(PREF_LAST_BRANCH);
+                Preferences.Remove(PREF_LAST_DEPARTMENT);
+                Console.WriteLine("[StockTakePage] Cleared cached picker selections");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StockTakePage] Error clearing cached selections: {ex.Message}");
             }
         }
 
@@ -251,6 +352,9 @@ namespace RenewitSalesforceApp.Views
         private void OnLocationFieldChanged(object sender, EventArgs e)
         {
             Console.WriteLine("[StockTakePage] Location field changed");
+
+            SaveCachedSelections();
+
         }
 
         private void OnCommentsChanged(object sender, TextChangedEventArgs e)
@@ -317,7 +421,8 @@ namespace RenewitSalesforceApp.Views
                     {
                         Formats = BarcodeFormat.Pdf417,
                         AutoRotate = false,
-                        Multiple = false
+                        Multiple = false,
+                        TryHarder = true
                     },
                     IsTorchOn = false
                 };
@@ -351,7 +456,7 @@ namespace RenewitSalesforceApp.Views
                             // SUCCESS FEEDBACK
                             try
                             {
-                                Vibration.Vibrate(TimeSpan.FromMilliseconds(200));
+                                //Vibration.Vibrate(TimeSpan.FromMilliseconds(200));
                                 await PlayScanSuccessSound();
                             }
                             catch (Exception feedbackEx)
@@ -986,14 +1091,14 @@ namespace RenewitSalesforceApp.Views
                 {
                     if (_isFlashlightOn)
                     {
-                        _flashlightButton.Text = "\ue8f4";  // flashlight_on
+                        _flashlightButton.Text = "\uf00b";  // flashlight_on
                         _flashlightButton.BackgroundColor = Color.FromArgb("#FFD700");
                         _flashlightButton.TextColor = Colors.Black;
                         _flashlightButton.BorderColor = Color.FromArgb("#FFD700");
                     }
                     else
                     {
-                        _flashlightButton.Text = "\ue8f5";  // flashlight_off
+                        _flashlightButton.Text = "\uf00a";  // flashlight_off
                         _flashlightButton.BackgroundColor = Color.FromArgb("#40FFFFFF");
                         _flashlightButton.TextColor = Colors.White;
                         _flashlightButton.BorderColor = Colors.White;
@@ -1582,6 +1687,8 @@ namespace RenewitSalesforceApp.Views
 
                     return;
                 }
+
+                SaveCachedSelections();
 
                 // 2. Get current location
                 Location currentLocation = _currentLocation;

@@ -9,16 +9,14 @@ namespace RenewitSalesforceApp.Services
 {
     public class SalesforceService
     {
-        // Configuration properties
+
         private readonly bool _isProd;
         private string _clientId;
         private string _clientSecret;
 
-        // URLs for different environments - UPDATE THESE WITH YOUR RENEWIT SALESFORCE URLS
-        private readonly string _prodTokenUrl = "https://login.salesforce.com/services/oauth2/token";
+        private readonly string _prodTokenUrl = "https://renewit.my.salesforce.com/services/oauth2/token";
         private readonly string _sandboxTokenUrl = "https://renewit--copyrenew.sandbox.my.salesforce.com/services/oauth2/token";
 
-        // Service state
         private string _accessToken;
         private string _instanceUrl;
         private string _idUrl;
@@ -28,7 +26,6 @@ namespace RenewitSalesforceApp.Services
         private DateTime _tokenExpiry;
         private readonly HttpClient _httpClient;
 
-        // File path for token cache
         private readonly string _tokenCacheFile;
 
         public string InstanceUrl => _instanceUrl;
@@ -40,7 +37,6 @@ namespace RenewitSalesforceApp.Services
             _httpClient = new HttpClient();
             _tokenCacheFile = Path.Combine(FileSystem.CacheDirectory, "renewit_sf_token_cache.json");
 
-            // Initialize credentials asynchronously
             MainThread.BeginInvokeOnMainThread(async () =>
             {
                 await InitializeCredentialsAsync();
@@ -52,26 +48,22 @@ namespace RenewitSalesforceApp.Services
         {
             try
             {
-                // Try to get credentials from secure storage
                 string clientIdKey = _isProd ? "RenewitProdClientId" : "RenewitSandboxClientId";
                 string clientSecretKey = _isProd ? "RenewitProdClientSecret" : "RenewitSandboxClientSecret";
 
                 _clientId = await SecureStorage.GetAsync(clientIdKey);
                 _clientSecret = await SecureStorage.GetAsync(clientSecretKey);
 
-                // If we don't have stored credentials yet, use defaults and save them
                 if (string.IsNullOrEmpty(_clientId) || string.IsNullOrEmpty(_clientSecret))
                 {
-                    // Set default values - REPLACE THESE WITH YOUR ACTUAL RENEWIT CREDENTIALS
                     _clientId = _isProd
-                        ? ""  // Your Renewit prod client ID
-                        : "3MVG9f4Sg6xGHZYr8NWbJAKo7ETI68zkGk6o0OYj7gEyu8NYSIYbdFNroXUVmzexy2MxoW0e8cd_60ft.o_LU";  // Your Renewit sandbox client ID
+                        ? "3MVG9mIli7ewofGuboj8P0Ar0BQipyVoImg8iCQMojXpmM8goUNHPe6zMK1zV9gsPbd7RfBBeil_7XaI5E6do"  
+                        : "3MVG9f4Sg6xGHZYr8NWbJAKo7ETI68zkGk6o0OYj7gEyu8NYSIYbdFNroXUVmzexy2MxoW0e8cd_60ft.o_LU";  
 
                     _clientSecret = _isProd
-                        ? ""  // Your Renewit prod client secret
-                        : "19A540E088639F8561122A976551D02791354166D9A200509A081B730BC77630";  // Your Renewit sandbox client secret
+                        ? "383EE89E653D0DA07A123F398E8DEB5F329CBB8377191D45A714ED0D7080ED06" 
+                        : "19A540E088639F8561122A976551D02791354166D9A200509A081B730BC77630";  
 
-                    // Store in secure storage for next time
                     await SecureStorage.SetAsync(clientIdKey, _clientId);
                     await SecureStorage.SetAsync(clientSecretKey, _clientSecret);
 
@@ -86,7 +78,6 @@ namespace RenewitSalesforceApp.Services
             {
                 Console.WriteLine($"Error initializing Renewit credentials: {ex.Message}");
 
-                // Fallback to default values if secure storage fails
                 _clientId = _isProd
                     ? "YOUR_RENEWIT_PROD_CLIENT_ID"
                     : "YOUR_RENEWIT_SANDBOX_CLIENT_ID";
@@ -105,12 +96,10 @@ namespace RenewitSalesforceApp.Services
                 {
                     var json = File.ReadAllText(_tokenCacheFile);
                     var cachedToken = JsonSerializer.Deserialize<SalesforceTokenCache>(json);
-
                     if (cachedToken != null &&
-                        DateTime.UtcNow < cachedToken.ExpiryTime &&
+                        DateTime.UtcNow.AddHours(2) < cachedToken.ExpiryTime &&
                         !string.IsNullOrEmpty(cachedToken.AccessToken))
                     {
-                        // Token is still valid, restore it
                         _accessToken = cachedToken.AccessToken;
                         _instanceUrl = cachedToken.InstanceUrl;
                         _idUrl = cachedToken.IdUrl;
@@ -118,7 +107,6 @@ namespace RenewitSalesforceApp.Services
                         _tokenType = cachedToken.TokenType;
                         _issuedAt = cachedToken.IssuedAt;
                         _tokenExpiry = cachedToken.ExpiryTime;
-
                         Console.WriteLine("Loaded cached Renewit Salesforce token, valid until: " + _tokenExpiry);
                     }
                 }

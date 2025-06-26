@@ -157,6 +157,8 @@ namespace RenewitSalesforceApp.Services
                 .FirstOrDefaultAsync();
         }
 
+        // Add this enhanced cleanup method to your LocalDatabaseService class:
+
         public async Task CleanupSyncedRecordsAsync(int daysOld = 30)
         {
             await EnsureInitializedAsync();
@@ -173,10 +175,192 @@ namespace RenewitSalesforceApp.Services
             foreach (var record in oldSyncedRecords)
             {
                 Console.WriteLine($"[LocalDB] Cleaning up old synced record: {record.Vehicle_Registration__c} (SF ID: {record.Id})");
+
+                // Clean up associated photos BEFORE deleting the database record
+                await CleanupRecordPhotosAsync(record);
+
+                // Delete the database record
                 await _database.DeleteAsync(record);
             }
 
-            Console.WriteLine($"[LocalDB] Cleaned up {oldSyncedRecords.Count} old synced records");
+            Console.WriteLine($"[LocalDB] Cleaned up {oldSyncedRecords.Count} old synced records and their photos");
+        }
+
+        // Add this new method to handle photo cleanup:
+        private async Task CleanupRecordPhotosAsync(StockTakeRecord record)
+        {
+            try
+            {
+                if (record == null) return;
+
+                var photosToDelete = new List<string>();
+
+                // Collect photo paths from different sources
+                if (!string.IsNullOrEmpty(record.PhotoPath))
+                {
+                    photosToDelete.Add(record.PhotoPath);
+                }
+
+                if (!string.IsNullOrEmpty(record.AllPhotoPaths))
+                {
+                    var allPaths = record.AllPhotoPaths.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                    photosToDelete.AddRange(allPaths);
+                }
+
+                // Remove duplicates
+                photosToDelete = photosToDelete.Distinct().ToList();
+
+                // Delete each photo file
+                foreach (string photoPath in photosToDelete)
+                {
+                    try
+                    {
+                        if (File.Exists(photoPath))
+                        {
+                            File.Delete(photoPath);
+                            Console.WriteLine($"[LocalDB] Deleted photo file: {Path.GetFileName(photoPath)}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[LocalDB] Photo file not found (already deleted?): {Path.GetFileName(photoPath)}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[LocalDB] Error deleting photo {photoPath}: {ex.Message}");
+                        // Continue with other photos even if one fails
+                    }
+                }
+
+                if (photosToDelete.Count > 0)
+                {
+                    Console.WriteLine($"[LocalDB] Cleaned up {photosToDelete.Count} photo files for record {record.Vehicle_Registration__c}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LocalDB] Error during photo cleanup for record: {ex.Message}");
+            }
+        }
+
+        // Add this method to clean up orphaned photos (photos without database records):
+        public async Task CleanupOrphanedPhotosAsync()
+        {
+            try
+            {
+                Console.WriteLine("[LocalDB] Starting orphaned photo cleanup");
+
+                // Get the photos directory
+                string localAppData = FileSystem.AppDataDirectory;
+                string photosFolder = Path.Combine(localAppData, "StockTakePhotos");
+
+                if (!Directory.Exists(photosFolder))
+                {
+                    Console.WriteLine("[LocalDB] Photos folder doesn't exist, nothing to clean up");
+                    return;
+                }
+
+                // Get all photo files
+                var allPhotoFiles = Directory.GetFiles(photosFolder, "*.jpg", SearchOption.AllDirectories)
+                                           .Concat(Directory.GetFiles(photosFolder, "*.png", SearchOption.AllDirectories))
+                                           .ToList();
+
+                if (allPhotoFiles.Count == 0)
+                {
+                    Console.WriteLine("[LocalDB] No photo files found");
+                    return;
+                }
+
+                // Get all photo paths referenced in database
+                var allRecords = await _database.Table<StockTakeRecord>().ToListAsync();
+                var referencedPhotos = new HashSet<string>();
+
+                foreach (var record in allRecords)
+                {
+                    if (!string.IsNullOrEmpty(record.PhotoPath))
+                    {
+                        referencedPhotos.Add(record.PhotoPath);
+                    }
+
+                    if (!string.IsNullOrEmpty(record.AllPhotoPaths))
+                    {
+                        var paths = record.AllPhotoPaths.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var path in paths)
+                        {
+                            referencedPhotos.Add(path);
+                        }
+                    }
+                }
+
+                // Find orphaned photos
+                var orphanedPhotos = allPhotoFiles.Where(file => !referencedPhotos.Contains(file)).ToList();
+
+                // Delete orphaned photos
+                foreach (string orphanedPhoto in orphanedPhotos)
+                {
+                    try
+                    {
+                        File.Delete(orphanedPhoto);
+                        Console.WriteLine($"[LocalDB] Deleted orphaned photo: {Path.GetFileName(orphanedPhoto)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[LocalDB] Error deleting orphaned photo {orphanedPhoto}: {ex.Message}");
+                    }
+                }
+
+                Console.WriteLine($"[LocalDB] Orphaned photo cleanup complete. Removed {orphanedPhotos.Count} orphaned files out of {allPhotoFiles.Count} total files");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LocalDB] Error during orphaned photo cleanup: {ex.Message}");
+            }
+        }
+
+        // Add this method to get storage statistics:
+        public async Task<(int recordCount, int photoCount, long totalPhotoSize)> GetStorageStatsAsync()
+        {
+            try
+            {
+                await EnsureInitializedAsync();
+
+                // Count database records
+                var recordCount = await _database.Table<StockTakeRecord>().CountAsync();
+
+                // Count and measure photos
+                string localAppData = FileSystem.AppDataDirectory;
+                string photosFolder = Path.Combine(localAppData, "StockTakePhotos");
+
+                if (!Directory.Exists(photosFolder))
+                {
+                    return (recordCount, 0, 0);
+                }
+
+                var photoFiles = Directory.GetFiles(photosFolder, "*.jpg", SearchOption.AllDirectories)
+                                         .Concat(Directory.GetFiles(photosFolder, "*.png", SearchOption.AllDirectories))
+                                         .ToArray();
+
+                long totalSize = 0;
+                foreach (string file in photoFiles)
+                {
+                    try
+                    {
+                        var fileInfo = new FileInfo(file);
+                        totalSize += fileInfo.Length;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[LocalDB] Error getting file size for {file}: {ex.Message}");
+                    }
+                }
+
+                return (recordCount, photoFiles.Length, totalSize);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LocalDB] Error getting storage stats: {ex.Message}");
+                return (0, 0, 0);
+            }
         }
         #endregion
     }

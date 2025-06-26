@@ -17,7 +17,7 @@ namespace RenewitSalesforceApp.Services
         {
             _stockTakeService = stockTakeService;
 
-            // Keep cleanup timer - runs once daily to clean old records
+            // Keep cleanup timer - runs once daily to clean old records AND photos
             _cleanupTimer = new Timer(PerformCleanup, null, TimeSpan.FromHours(1), TimeSpan.FromHours(24));
 
             // Enable connectivity change events
@@ -80,20 +80,89 @@ namespace RenewitSalesforceApp.Services
             }
         }
 
+        // ENHANCED: Now cleans up both database records AND photos
         private async void PerformCleanup(object state)
         {
             try
             {
-                Console.WriteLine("[SyncService] Starting daily cleanup of old synced records");
+                Console.WriteLine("[SyncService] Starting daily cleanup of old synced records and photos");
+
                 var dbService = Application.Current?.Handler?.MauiContext?.Services.GetService<LocalDatabaseService>();
                 if (dbService != null)
                 {
+                    // Get storage stats before cleanup
+                    var (recordsBefore, photosBefore, sizeBefore) = await dbService.GetStorageStatsAsync();
+                    Console.WriteLine($"[SyncService] Before cleanup: {recordsBefore} records, {photosBefore} photos, {sizeBefore / 1024 / 1024:F1} MB");
+
+                    // Clean up old synced records (30 days) AND their photos
                     await dbService.CleanupSyncedRecordsAsync(30);
+
+                    // Clean up any orphaned photos (photos without database records)
+                    await dbService.CleanupOrphanedPhotosAsync();
+
+                    // Get storage stats after cleanup
+                    var (recordsAfter, photosAfter, sizeAfter) = await dbService.GetStorageStatsAsync();
+                    Console.WriteLine($"[SyncService] After cleanup: {recordsAfter} records, {photosAfter} photos, {sizeAfter / 1024 / 1024:F1} MB");
+
+                    var recordsRemoved = recordsBefore - recordsAfter;
+                    var photosRemoved = photosBefore - photosAfter;
+                    var spaceFreed = (sizeBefore - sizeAfter) / 1024 / 1024;
+
+                    Console.WriteLine($"[SyncService] Cleanup complete: Removed {recordsRemoved} records, {photosRemoved} photos, freed {spaceFreed:F1} MB");
+                }
+                else
+                {
+                    Console.WriteLine("[SyncService] Could not get LocalDatabaseService for cleanup");
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[SyncService] Cleanup error: {ex.Message}");
+            }
+        }
+
+        // ADD: Manual cleanup method that can be called from UI
+        public async Task PerformManualCleanupAsync()
+        {
+            try
+            {
+                Console.WriteLine("[SyncService] Starting manual cleanup");
+
+                var dbService = Application.Current?.Handler?.MauiContext?.Services.GetService<LocalDatabaseService>();
+                if (dbService != null)
+                {
+                    // Clean up old synced records AND their photos
+                    await dbService.CleanupSyncedRecordsAsync(30);
+
+                    // Clean up orphaned photos
+                    await dbService.CleanupOrphanedPhotosAsync();
+
+                    Console.WriteLine("[SyncService] Manual cleanup complete");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SyncService] Manual cleanup error: {ex.Message}");
+                throw; // Re-throw so UI can handle it
+            }
+        }
+
+        // ADD: Get storage information for UI display
+        public async Task<(int records, int photos, long sizeBytes)> GetStorageInfoAsync()
+        {
+            try
+            {
+                var dbService = Application.Current?.Handler?.MauiContext?.Services.GetService<LocalDatabaseService>();
+                if (dbService != null)
+                {
+                    return await dbService.GetStorageStatsAsync();
+                }
+                return (0, 0, 0);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SyncService] Error getting storage info: {ex.Message}");
+                return (0, 0, 0);
             }
         }
 

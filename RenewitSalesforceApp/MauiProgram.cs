@@ -8,7 +8,7 @@ namespace RenewitSalesforceApp
 {
     public static class MauiProgram
     {
-        private const bool USE_PRODUCTION_SALESFORCE = false;
+        private const bool USE_PRODUCTION_SALESFORCE = true;
 
         public static MauiApp CreateMauiApp()
         {
