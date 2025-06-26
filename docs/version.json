@@ -1,8 +1,8 @@
 {
-  "notes": "- Added navigation support for required fields on stock take page\n- Update version.json for v1.0-7 [skip ci]",
-  "releaseDate": "2025-06-23T06:45:16",
-  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-8/RenewitSalesforceApp-v1.0-8.apk",
-  "buildNumber": 8,
+  "releaseDate": "2025-06-26T07:52:03",
   "required": false,
+  "buildNumber": 9,
+  "downloadUrl": "https://github.com/mdevlamb/RenewitSalesforceApp/releases/download/v1.0-9/RenewitSalesforceApp-v1.0-9.apk",
+  "notes": "- Pointing To Production, Caching last selected branch and department\n- Update version.json for v1.0-8 [skip ci]",
   "version": "1.0"
 }
